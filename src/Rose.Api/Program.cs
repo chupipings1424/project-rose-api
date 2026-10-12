@@ -8,6 +8,7 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Rose.Api.Auth;
 using Rose.Api.Infrastructure;
+using Rose.Api.Lifetime;
 using Rose.Api.Reminders;
 using Rose.Application;
 using Rose.Application.Common;
@@ -80,6 +81,13 @@ builder.Services.AddControllers().AddJsonOptions(options =>
 builder.Services.AddHealthChecks();
 builder.Services.AddHostedService<ReminderWorker>();
 
+// ---- lifetime: close ROSE when its last page closes (or the power button) --
+builder.Services.AddOptions<ShutdownOptions>()
+    .Bind(builder.Configuration.GetSection(ShutdownOptions.Section))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+builder.Services.AddSingleton<PresenceTracker>();
+builder.Services.AddHostedService<ShutdownWatchdog>();
 // ---- Swagger -------------------------------------------------------------
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>

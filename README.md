@@ -1,13 +1,13 @@
 # Project ROSE API
 
 The backend for [Project ROSE](https://github.com/chupipings1424/project-rose): a .NET 9 ASP.NET Core
-Web API with Swagger, serving the **Payment Tracker** and **Reminders** projects.
+Web API with Swagger, serving the **Payment Tracker**, **Personal Budget** and **Reminders** projects.
 
 ROSE (the React app) is only the UI. This API owns the data:
 
 | Project | Storage |
 | --- | --- |
-| Payment Tracker | `data/payments.xlsx` - the Excel workbook *is* the database |
+| Payment Tracker + Personal Budget | `data/payments.xlsx` - the Excel workbook *is* the database |
 | Reminders | `data/reminders.json`, `data/push-devices.json`, `data/vapid.json` |
 
 `data/` is git-ignored - your personal data never leaves your PC.
@@ -69,13 +69,25 @@ variables such as `Reminders__DesktopAlarms=false`):
 | `Reminders:SchedulerEnabled` | `true` | Ring reminders in the background |
 | `Reminders:DesktopAlarms` | `true` | Always-on-top popup on this PC |
 | `Reminders:TickInterval` | `00:00:15` | How often due reminders are checked |
+| `Shutdown:Enabled` | `false` | Let ROSE close the API (last tab closed, or the power button). The ROSE launcher sets it to `true` |
+| `Shutdown:IdleTimeout` | `00:00:20` | How long to wait after the last ROSE page disconnected |
+
+### Auto-close
+
+With `Shutdown:Enabled`, every open ROSE page holds `GET /api/system/presence` (a Server-Sent
+Events stream). When the last stream has been gone for `IdleTimeout`, a background service
+(`ShutdownWatchdog`) stops the API. The ROSE launcher (`npm start` / `start-rose.bat`) then
+stops the UI too. `dotnet run` and Visual Studio leave it off, so the API keeps running.
 
 ## Security
 
 - The access token is compared in constant time; `POST /api/auth/login` allows 10 tries a minute.
 - A login returns a signed JWT (HS256). The signing key is generated once into
   `data/session-signing.key` - delete it to log every device out.
-- Every endpoint except `/health` and login needs that session token.
+- Every endpoint except `/health`, login and `/api/system/*` needs that session token.
+- `/api/system/*` is anonymous because the power button is also on the login page. It is
+  harmless: `POST /api/system/shutdown` requires an `X-Rose-Client` header. A custom header
+  forces a CORS preflight, which this API never grants, so other websites cannot call it.
 - Secrets are never committed: `appsettings.Local.json` and `data/` are git-ignored.
 
 ## Test
@@ -95,6 +107,7 @@ The port was also checked response-for-response against the original Flask and N
 | Auth | `POST /api/auth/login`, `GET /api/auth/session` |
 | Payment Tracker | `/api/payment-tracker/` `accounts`, `summary/{title}`, `payments`, `budget`, `report/summary`, `import/*`, `download`, `home-stats` |
 | Reminders | `/api/reminders/` `status`, `items`, `items/{id}/complete\|dismiss\|snooze`, `push/key\|subscribe\|unsubscribe\|test` |
+| System | `GET /api/system/info`, `GET /api/system/presence`, `POST /api/system/shutdown` |
 | Health | `GET /health` |
 
 Full, interactive documentation: Swagger.
