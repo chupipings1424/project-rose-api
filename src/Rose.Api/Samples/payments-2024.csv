@@ -1,0 +1,23 @@
+Title,Amount,Date,Time,Status,Due Date,Note
+Kitchen Renovation Loan,845.50,2024-01-15,09:00,Paid,2024-01-15,Instalment 1 of 12
+Kitchen Renovation Loan,845.50,2024-02-15,09:00,Paid,2024-02-15,Instalment 2 of 12
+Kitchen Renovation Loan,845.50,2024-03-15,09:00,Paid,2024-03-15,Instalment 3 of 12
+Kitchen Renovation Loan,845.50,2024-04-15,09:00,Paid,2024-04-15,Instalment 4 of 12
+Kitchen Renovation Loan,845.50,2024-05-15,09:00,Paid,2024-05-15,Instalment 5 of 12
+Kitchen Renovation Loan,845.50,2024-06-17,09:00,Paid,2024-06-15,Instalment 6 of 12 - paid late
+Kitchen Renovation Loan,845.50,2024-07-15,09:00,Paid,2024-07-15,Instalment 7 of 12
+Kitchen Renovation Loan,845.50,2024-08-15,09:00,Paid,2024-08-15,Instalment 8 of 12
+Kitchen Renovation Loan,845.50,2024-09-16,09:00,Paid,2024-09-15,Instalment 9 of 12
+Kitchen Renovation Loan,845.50,2024-10-15,09:00,Paid,2024-10-15,Instalment 10 of 12
+Kitchen Renovation Loan,845.50,2024-11-15,09:00,Paid,2024-11-15,Instalment 11 of 12
+Kitchen Renovation Loan,845.50,2024-12-16,09:00,Paid,2024-12-15,Instalment 12 of 12 - settled
+Laptop Instalment Plan,124.99,2024-03-02,14:30,Paid,2024-03-01,Instalment 1 of 6
+Laptop Instalment Plan,124.99,2024-04-01,14:30,Paid,2024-04-01,Instalment 2 of 6
+Laptop Instalment Plan,124.99,2024-05-01,14:30,Paid,2024-05-01,Instalment 3 of 6
+Laptop Instalment Plan,124.99,2024-06-03,14:30,Paid,2024-06-01,Instalment 4 of 6
+Laptop Instalment Plan,124.99,2024-07-01,14:30,Paid,2024-07-01,Instalment 5 of 6
+Laptop Instalment Plan,124.99,2024-08-01,14:30,Paid,2024-08-01,Instalment 6 of 6 - settled
+Dental Treatment Plan,310.00,2024-09-05,11:15,Paid,2024-09-05,Instalment 1 of 4
+Dental Treatment Plan,310.00,2024-10-05,11:15,Paid,2024-10-05,Instalment 2 of 4
+Dental Treatment Plan,310.00,2024-11-05,11:15,Paid,2024-11-05,Instalment 3 of 4
+Dental Treatment Plan,310.00,2024-12-05,11:15,Unpaid,2024-12-05,Instalment 4 of 4

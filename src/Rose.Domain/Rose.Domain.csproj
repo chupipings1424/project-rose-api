@@ -1,0 +1,3 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Pure business rules: no I/O, no packages, no clocks (time is always passed in). -->
+</Project>

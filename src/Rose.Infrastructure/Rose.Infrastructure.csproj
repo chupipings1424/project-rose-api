@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Adapters: Excel (ClosedXML), JSON files, Web Push and the Windows alarm popup. -->
+  <ItemGroup>
+    <ProjectReference Include="..\Rose.Application\Rose.Application.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="ClosedXML" />
+    <PackageReference Include="Lib.Net.Http.WebPush" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Reminders\alarm.ps1" LogicalName="Rose.Infrastructure.alarm.ps1" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Rose.UnitTests" />
+  </ItemGroup>
+</Project>

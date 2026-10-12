@@ -1,0 +1,15 @@
+# build output
+bin/
+obj/
+TestResults/
+*.user
+.vs/
+.idea/
+
+# personal data: the Excel workbook, reminders, push devices and keys
+data/
+*.xlsx
+!tests/**/fixtures/*.xlsx
+
+# local secrets (the access token lives here)
+appsettings.Local.json

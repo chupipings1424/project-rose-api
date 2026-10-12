@@ -1,0 +1,23 @@
+Year,Section,Group,Item,Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec,Notes
+2024,Revenue,Income,Salary,4200,4200,4200,4200,4200,4200,4200,4620,4620,4620,4620,4620,Raise from August
+2024,Revenue,Income,Freelance work,350,0,600,420,0,780,300,0,540,610,0,900,Evenings and weekends
+2024,Revenue,Income,Interest & dividends,18.4,18.9,19.35,19.8,20.25,20.7,21.15,21.6,22.05,22.5,22.95,23.4,Savings account
+2024,Revenue,Income,Tax refund,0,0,0,1240,0,0,0,0,0,0,0,0,Filed in March
+2024,Expense,Home,Rent,1250,1250,1250,1250,1250,1250,1250,1250,1250,1250,1250,1250,
+2024,Expense,Home,Electricity,138.2,142.6,121.4,98.75,86.3,94.1,132.8,148.9,119.6,92.4,105.7,151.3,Higher in summer
+2024,Expense,Home,Water & sewer,42.5,42.5,42.5,44.75,44.75,44.75,44.75,44.75,44.75,46.2,46.2,46.2,
+2024,Expense,Home,Internet,64.99,64.99,64.99,64.99,64.99,64.99,64.99,64.99,64.99,64.99,64.99,64.99,Fibre 500
+2024,Expense,Home,Home insurance,0,0,0,0,0,540,0,0,0,0,0,0,Paid annually
+2024,Expense,Daily Living,Groceries,486.3,452.15,510.8,478.6,495.25,521.4,540.9,502.35,488.7,517.2,563.85,642.1,
+2024,Expense,Daily Living,Dining out,132.5,98.4,165.2,148.75,187.3,210.6,240.85,175.4,140.2,158.9,182.35,265.7,
+2024,Expense,Daily Living,Household supplies,74.2,68.9,81.35,72.6,77.15,69.8,84.25,71.4,79.6,73.85,88.2,102.4,
+2024,Expense,Transportation,Fuel,182.4,168.75,195.6,204.3,188.9,221.45,238.7,215.2,190.85,176.4,169.3,198.6,
+2024,Expense,Transportation,Car insurance,118.5,118.5,118.5,118.5,118.5,118.5,124.75,124.75,124.75,124.75,124.75,124.75,Renewed in July
+2024,Expense,Transportation,Maintenance & repairs,0,320.5,0,0,145.8,0,0,0,680.25,0,0,95.4,Timing belt in September
+2024,Expense,Health,Health insurance,285,285,285,285,285,285,285,285,285,285,285,285,
+2024,Expense,Health,Pharmacy & medical,45.6,0,128.4,32.2,0,58.9,0,74.35,0,41.8,0,96.5,
+2024,Expense,Health,Gym membership,39.99,39.99,39.99,39.99,39.99,39.99,39.99,39.99,39.99,39.99,39.99,39.99,
+2024,Expense,Other,Subscriptions,47.96,47.96,47.96,47.96,52.94,52.94,52.94,52.94,52.94,52.94,52.94,52.94,Streaming and cloud
+2024,Expense,Other,Savings transfer,500,500,500,500,500,500,600,600,600,600,600,600,Increased after the raise
+2024,Expense,Other,Gifts & celebrations,0,85.4,0,62.3,0,120.5,0,0,74.9,0,58.2,485.6,Christmas in December
+2024,Expense,Other,Holiday & travel,0,0,0,0,0,1480.75,0,0,0,0,0,0,Summer trip
