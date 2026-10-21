@@ -16,3 +16,6 @@ csharp_style_namespace_declarations = file_scoped:warning
 csharp_style_var_for_built_in_types = true
 csharp_prefer_braces = when_multiline
 dotnet_sort_system_directives_first = true
+# EF Core migrations are written by `dotnet ef`: treat them as generated, so the analyzers skip them.
+[**/Migrations/*.cs]
+generated_code = true

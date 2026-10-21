@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Rose.Application.Importing;
+using Rose.Application.Lingo;
 using Rose.Application.Reminders;
 using Rose.Application.Tracker;
 
@@ -13,6 +14,7 @@ public static class DependencyInjection
         services.AddScoped<BudgetService>();
         services.AddScoped<ReportService>();
         services.AddScoped<ImportService>();
+        services.AddScoped<LingoService>();
 
         // Reminders live in memory, so there is exactly one of each.
         services.AddSingleton<ReminderService>();

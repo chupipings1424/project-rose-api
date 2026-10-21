@@ -96,7 +96,7 @@ builder.Services.AddSwaggerGen(options =>
     {
         Title = "Project ROSE API",
         Version = "v1",
-        Description = "Payment Tracker and Reminders for Project ROSE. Click **Authorize**, then call "
+        Description = "Payment Tracker, Reminders and ROSE Lingo for Project ROSE. Click **Authorize**, then call "
             + "`POST /api/auth/login` with your access token and paste the `access_token` it returns.",
     });
     options.IncludeXmlComments(Path.Combine(AppContext.BaseDirectory, $"{Assembly.GetExecutingAssembly().GetName().Name}.xml"));

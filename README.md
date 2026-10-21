@@ -1,7 +1,7 @@
 # Project ROSE API
 
 The backend for [Project ROSE](https://github.com/chupipings1424/project-rose): a .NET 9 ASP.NET Core
-Web API with Swagger, serving the **Payment Tracker**, **Personal Budget** and **Reminders** projects.
+Web API with Swagger, serving the **Payment Tracker**, **Personal Budget**, **Reminders** and **ROSE Lingo** projects.
 
 ROSE (the React app) is only the UI. This API owns the data:
 
@@ -9,6 +9,7 @@ ROSE (the React app) is only the UI. This API owns the data:
 | --- | --- |
 | Payment Tracker + Personal Budget | `data/payments.xlsx` - the Excel workbook *is* the database |
 | Reminders | `data/reminders.json`, `data/push-devices.json`, `data/vapid.json` |
+| ROSE Lingo | `data/lingo.db` - a SQLite database (EF Core), created and migrated on start |
 
 `data/` is git-ignored - your personal data never leaves your PC.
 
@@ -18,9 +19,11 @@ A clean, layered solution. Dependencies point inwards only.
 
 ```
 src/
-  Rose.Domain          pure rules: schedules, budget maths, reports, reminder repeats (no I/O)
+  Rose.Domain          pure rules: schedules, budget maths, reports, reminder repeats,
+                       spaced repetition, romaji / hangul romanization (no I/O)
   Rose.Application     use cases (services) + interfaces for the outside world
-  Rose.Infrastructure  Excel (ClosedXML), JSON files, CSV/XLSX import, Web Push, desktop alarm
+  Rose.Infrastructure  Excel (ClosedXML), JSON files, SQLite (EF Core), CSV/XLSX import,
+                       Web Push, desktop alarm, MyMemory translator
   Rose.Api             controllers, auth (JWT), Swagger, the reminder background worker
 tests/
   Rose.UnitTests            domain + services + real temp workbooks
@@ -71,6 +74,9 @@ variables such as `Reminders__DesktopAlarms=false`):
 | `Reminders:TickInterval` | `00:00:15` | How often due reminders are checked |
 | `Shutdown:Enabled` | `false` | Let ROSE close the API (last tab closed, or the power button). The ROSE launcher sets it to `true` |
 | `Shutdown:IdleTimeout` | `00:00:20` | How long to wait after the last ROSE page disconnected |
+| `Lingo:TranslatorBaseUrl` | `https://api.mymemory.translated.net/` | The free MyMemory translation API |
+| `Lingo:TranslatorEmail` | *(empty)* | Optional: raises MyMemory's free limit from 5,000 to 50,000 characters a day |
+| `Lingo:TranslatorTimeout` | `00:00:10` | Give up on a slow translation after this long |
 
 ### Auto-close
 
@@ -107,7 +113,27 @@ The port was also checked response-for-response against the original Flask and N
 | Auth | `POST /api/auth/login`, `GET /api/auth/session` |
 | Payment Tracker | `/api/payment-tracker/` `accounts`, `summary/{title}`, `payments`, `budget`, `report/summary`, `import/*`, `download`, `home-stats` |
 | Reminders | `/api/reminders/` `status`, `items`, `items/{id}/complete\|dismiss\|snooze`, `push/key\|subscribe\|unsubscribe\|test` |
+| ROSE Lingo | `/api/lingo/` `languages`, `kana`, `translate`, `cards` (CRUD), `cards/due`, `cards/{id}/review`, `starter/{language}`, `quiz` (GET + POST), `stats` |
 | System | `GET /api/system/info`, `GET /api/system/presence`, `POST /api/system/shutdown` |
 | Health | `GET /health` |
 
 Full, interactive documentation: Swagger.
+
+## ROSE Lingo
+
+- **Database:** EF Core + SQLite (`Rose.Infrastructure/Lingo`). `LingoDatabaseMigrator` applies
+  migrations on start, so `data/lingo.db` appears by itself. New migration:
+
+  ```powershell
+  dotnet tool restore
+  dotnet ef migrations add <Name> --project src/Rose.Infrastructure --startup-project src/Rose.Infrastructure `
+    --context LingoDbContext --output-dir Lingo/Migrations
+  ```
+
+  The full walkthrough is in the UI repo's
+  [LEARNING.md, section 15](https://github.com/chupipings1424/project-rose/blob/main/LEARNING.md#15-rose-lingo-a-real-database-sqlite--ef-core).
+- **Translation:** `MyMemoryTranslator` (free, no key, about 5,000 characters a day per IP).
+  The text you translate is sent to MyMemory, nothing else is. When it is unreachable (offline,
+  or blocked by a company network) the API answers **502** with a friendly message.
+- **Spaced repetition:** `Rose.Domain/Lingo/Srs.cs` (SM-2). The daily quiz is optional, one per
+  language per day (a unique index enforces it); wrong answers send the card back to review.

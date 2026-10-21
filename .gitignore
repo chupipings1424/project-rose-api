@@ -13,3 +13,7 @@ data/
 
 # local secrets (the access token lives here)
 appsettings.Local.json
+# SQLite files (ROSE Lingo; the real one lives in data/, these catch stray design-time copies)
+*.db
+*.db-shm
+*.db-wal

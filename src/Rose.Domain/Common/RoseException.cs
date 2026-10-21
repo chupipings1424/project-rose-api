@@ -11,3 +11,6 @@ public sealed class ConflictException(string message) : RoseException(message);
 
 /// <summary>The thing asked for does not exist (HTTP 404).</summary>
 public sealed class NotFoundException(string message) : RoseException(message);
+
+/// <summary>A service ROSE relies on (e.g. the online translator) failed or refused (HTTP 502).</summary>
+public sealed class UpstreamException(string message) : RoseException(message);

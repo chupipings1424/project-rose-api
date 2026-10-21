@@ -14,6 +14,7 @@ internal sealed class RoseExceptionHandler(IProblemDetailsService problems) : IE
             ValidationException => StatusCodes.Status400BadRequest,
             NotFoundException => StatusCodes.Status404NotFound,
             ConflictException => StatusCodes.Status409Conflict,
+            UpstreamException => StatusCodes.Status502BadGateway,
             BadHttpRequestException bad => bad.StatusCode,
             _ => 0,
         };

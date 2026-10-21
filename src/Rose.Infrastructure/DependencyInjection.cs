@@ -1,3 +1,5 @@
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -8,6 +10,7 @@ using Rose.Application.Reminders;
 using Rose.Domain.Reminders;
 using Rose.Infrastructure.Excel;
 using Rose.Infrastructure.Importing;
+using Rose.Infrastructure.Lingo;
 using Rose.Infrastructure.Reminders;
 using Rose.Infrastructure.Storage;
 
@@ -47,7 +50,30 @@ public static class DependencyInjection
             VapidKeys.LoadOrCreate(new JsonDataFile<VapidKeys?>(DataFile(sp, "vapid.json"), () => null)));
         services.AddSingleton<IPushSender, WebPushSender>();
         services.AddSingleton<IDesktopAlarm, PowerShellDesktopAlarm>();
+
+        AddLingo(services, configuration);
         return services;
+    }
+
+    private static void AddLingo(IServiceCollection services, IConfiguration configuration)
+    {
+        services.AddOptions<LingoOptions>()
+            .Bind(configuration.GetSection(LingoOptions.Section))
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+
+        // SqliteConnectionStringBuilder quotes the path, so folders with spaces work.
+        services.AddDbContext<LingoDbContext>((sp, options) =>
+            options.UseSqlite(new SqliteConnectionStringBuilder { DataSource = DataFile(sp, "lingo.db") }.ToString()));
+        services.AddScoped<ILingoRepository, EfLingoRepository>();
+        services.AddHostedService<LingoDatabaseMigrator>();
+
+        services.AddHttpClient<ITranslator, MyMemoryTranslator>((sp, http) =>
+        {
+            var options = sp.GetRequiredService<IOptions<LingoOptions>>().Value;
+            http.BaseAddress = new Uri(options.TranslatorBaseUrl.TrimEnd('/') + "/");
+            http.Timeout = options.TranslatorTimeout;
+        });
     }
 
     private static string DataFile(IServiceProvider services, string name) =>
