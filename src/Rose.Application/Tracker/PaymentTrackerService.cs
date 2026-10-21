@@ -115,10 +115,32 @@ public sealed class PaymentTrackerService(ITrackerWorkbookStore store, TimeProvi
             request.Note ?? "");
 
         using var book = await store.OpenAsync(ct);
-        book.AddPayment(payment);
+        var instalment = FindUnpaidInstalment(book.Payments(), payment);
+        if (instalment is null)
+        {
+            book.AddPayment(payment);
+        }
+        else
+        {
+            // Paying an instalment that is already scheduled settles that row instead of adding a duplicate.
+            payment = payment with
+            {
+                Id = instalment.Id,
+                Title = instalment.Title,
+                Note = payment.Note.Length > 0 ? payment.Note : instalment.Note,
+            };
+            book.UpdatePayment(payment);
+        }
         book.Save();
-        return new PaymentCreated(payment.Id, AccountSummary.For(title, book.Accounts(), book.Payments(), clock.Today()));
+        return new PaymentCreated(
+            payment.Id, instalment is not null, AccountSummary.For(title, book.Accounts(), book.Payments(), clock.Today()));
     }
+
+    /// <summary>The earliest Unpaid payment of the same title due on the same day, when a Paid payment is logged.</summary>
+    private static Payment? FindUnpaidInstalment(IEnumerable<Payment> payments, Payment incoming) =>
+        incoming.IsPaid() && incoming.DueDate.Length > 0
+            ? payments.FirstOrDefault(p => p.HasTitle(incoming.Title) && !p.IsPaid() && p.DueOrDate() == incoming.DueDate)
+            : null;
 
     public async Task<PaymentUpdated> SetPaymentStatusAsync(string id, UpdatePaymentRequest request, CancellationToken ct = default)
     {

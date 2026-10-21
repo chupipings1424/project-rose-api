@@ -44,7 +44,8 @@ public sealed record ServerNow(string Date, string Time);
 
 public sealed record OkResponse(bool Ok = true);
 
-public sealed record PaymentCreated(string Id, AccountSummary Summary);
+/// <param name="Settled">True when an existing Unpaid instalment was marked as paid instead of adding a row.</param>
+public sealed record PaymentCreated(string Id, bool Settled, AccountSummary Summary);
 
 public sealed record PaymentUpdated(bool Ok, AccountSummary Summary);
 

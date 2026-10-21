@@ -42,6 +42,43 @@ public sealed class PaymentTrackerTests(RoseApiFactory factory) : IClassFixture<
     }
 
     [Fact]
+    public async Task Paying_a_scheduled_instalment_settles_it_instead_of_adding_a_row()
+    {
+        var client = await factory.CreateAuthenticatedClientAsync();
+        var title = "Phone " + Guid.NewGuid().ToString("N")[..6];
+        await client.PostAsJsonAsync(Url("accounts"), new
+        {
+            title, total_amount = 300, instalments = "3", frequency = "Monthly", start_date = "2026-01-15",
+        });
+
+        var settled = await (await client.PostAsJsonAsync(Url("payments"), new
+        {
+            title, amount = "100", date = "2026-01-14", time = "10:30", status = "Paid", due_date = "2026-01-15", note = "",
+        })).JsonAsync();
+
+        Assert.True(settled.GetProperty("settled").GetBoolean());
+        var summary = settled.GetProperty("summary");
+        Assert.Equal(3, summary.GetProperty("payment_count").GetInt32());
+        Assert.Equal(1, summary.GetProperty("paid_count").GetInt32());
+        Assert.Equal("2026-02-15", summary.GetProperty("next_due_date").GetString());
+        var first = summary.GetProperty("payments").EnumerateArray()
+            .Single(p => p.GetProperty("due_date").GetString() == "2026-01-15");
+        Assert.Equal("Paid", first.GetProperty("status").GetString());
+        Assert.Equal("2026-01-14", first.GetProperty("date").GetString());
+        Assert.Equal("Instalment 1 of 3", first.GetProperty("note").GetString());
+
+        // No Unpaid instalment on that day: it is an extra payment, so it gets its own row.
+        var extra = await (await client.PostAsJsonAsync(Url("payments"), new
+        {
+            title, amount = "50", date = "2026-01-20", time = "10:30", status = "Paid", due_date = "2026-01-20", note = "Extra",
+        })).JsonAsync();
+        Assert.False(extra.GetProperty("settled").GetBoolean());
+        Assert.Equal(4, extra.GetProperty("summary").GetProperty("payment_count").GetInt32());
+
+        await client.DeleteAsync(Url($"accounts/{Uri.EscapeDataString(title)}"));
+    }
+
+    [Fact]
     public async Task Validation_errors_come_back_as_problem_details()
     {
         var client = await factory.CreateAuthenticatedClientAsync();

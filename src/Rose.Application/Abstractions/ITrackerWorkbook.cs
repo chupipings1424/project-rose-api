@@ -31,6 +31,10 @@ public interface ITrackerWorkbook : IDisposable
 
     void AddAccount(Account account);
     void AddPayment(Payment payment);
+
+    /// <summary>Overwrites the row whose id matches <paramref name="payment"/>. Returns false if there is none.</summary>
+    bool UpdatePayment(Payment payment);
+
     bool SetPaymentStatus(string id, string status);
     bool DeletePayment(string id);
 

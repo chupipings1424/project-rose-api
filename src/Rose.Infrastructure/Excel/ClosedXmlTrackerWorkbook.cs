@@ -136,10 +136,17 @@ internal sealed class ClosedXmlTrackerWorkbook(XLWorkbook workbook, string path,
         accounts = null;
     }
 
-    public void AddPayment(Payment payment)
+    public void AddPayment(Payment payment) => WritePayment(PaymentsSheet, NextRow(PaymentsSheet), payment);
+
+    public bool UpdatePayment(Payment payment)
     {
-        var ws = PaymentsSheet;
-        var row = NextRow(ws);
+        if (FindRow(PaymentsSheet, 1, payment.Id) is not { } row) return false;
+        WritePayment(PaymentsSheet, row, payment);
+        return true;
+    }
+
+    private void WritePayment(IXLWorksheet ws, int row, Payment payment)
+    {
         ws.Cell(row, 1).Value = payment.Id;
         ws.Cell(row, 2).Value = payment.Title.Trim();
         ws.Cell(row, 3).Value = payment.Amount;
