@@ -5,15 +5,20 @@ using Rose.Domain.Lingo;
 
 namespace Rose.Application.Lingo;
 
-/// <summary>The ROSE Lingo use cases: translate, keep flashcards, review them and take the daily quiz.</summary>
+/// <summary>The ROSE Lingo use cases: translate offline, keep flashcards, review them and practise with quizzes.</summary>
 public sealed class LingoService(ILingoRepository repository, ITranslator translator, TimeProvider clock)
 {
     public const int MaxTranslateLength = 500;
+    public const int HistorySize = 30;
     private const int LearnedAfter = 3;
 
     public static IReadOnlyList<LanguageInfo> AllLanguages() => Languages.All;
 
     public static IReadOnlyList<KanaEntry> KanaChart() => Kana.Chart;
+
+    public static IReadOnlyList<HangulEntry> HangulChart() => Rose.Domain.Lingo.HangulChart.Chart;
+
+    public TranslatorStatus TranslatorStatus() => translator.Status();
 
     public async Task<TranslationResult> TranslateAsync(TranslateRequest request, CancellationToken ct)
     {
@@ -104,45 +109,73 @@ public sealed class LingoService(ILingoRepository repository, ITranslator transl
         return new StarterImportResult(added, words.Count - added);
     }
 
-    public async Task<QuizDto> QuizAsync(string? language, CancellationToken ct)
+    /// <summary>A new quiz every time you ask: random cards, or the ones you picked.</summary>
+    public async Task<QuizDto> QuizAsync(QuizRequest request, CancellationToken ct)
     {
-        var code = Languages.Require(language);
-        var today = clock.Today();
-        var done = await repository.FindQuizResultAsync(today, code, ct);
-        var cards = await repository.CardsAsync(code, ct);
-        var questions = done is null ? DailyQuiz.Build(cards, code, today) : [];
+        var code = Languages.Require(request.Language);
+        var picked = request.CardIds ?? [];
+        var mode = picked.Count > 0 ? QuizMode.Custom : QuizMode.Random;
+        if (mode == QuizMode.Random && !Quiz.Sizes.Contains(request.Count ?? 0))
+            throw new ValidationException($"count must be {string.Join(", ", Quiz.Sizes)}.");
+        if (picked.Count > Quiz.MaxQuestions)
+            throw new ValidationException($"Pick at most {Quiz.MaxQuestions} cards.");
+
+        var deck = await repository.CardsAsync(code, ct);
+        IReadOnlyList<Card> asked;
+        if (mode == QuizMode.Random)
+        {
+            asked = Quiz.PickRandom(deck, request.Count!.Value, Random.Shared);
+        }
+        else
+        {
+            var ids = picked.ToHashSet(StringComparer.Ordinal);
+            asked = deck.Where(c => ids.Contains(c.Id)).ToList();
+            if (asked.Count != ids.Count) throw new ValidationException("Some of the picked cards no longer exist - pick again.");
+        }
+
+        var questions = Quiz.Build(deck, asked, Random.Shared);
         return new QuizDto(
-            today,
             code,
+            mode.ToString().ToLowerInvariant(),
             questions.Select(q => new QuizQuestionDto(q.Number, q.CardId, q.Kind.ToString().ToLowerInvariant(), q.Prompt, q.Reading, q.Choices, q.Answer)).ToList(),
-            Math.Max(0, DailyQuiz.MinCards - cards.Count),
-            done is null ? null : QuizResultDto.From(done));
+            Math.Max(0, Quiz.MinCards - deck.Count));
     }
 
     public async Task<QuizResultDto> SubmitQuizAsync(QuizSubmitRequest request, CancellationToken ct)
     {
         var code = Languages.Require(request.Language);
+        if (!Enum.TryParse<QuizMode>(request.Mode ?? nameof(QuizMode.Random), ignoreCase: true, out var mode)
+            || !Enum.IsDefined(mode) || int.TryParse(request.Mode, out _))
+        {
+            throw new ValidationException("mode must be random or custom.");
+        }
         var results = request.Results ?? [];
-        if (results.Count is 0 or > DailyQuiz.Size)
-            throw new ValidationException($"Send between 1 and {DailyQuiz.Size} answers.");
+        if (results.Count is 0 or > Quiz.MaxQuestions)
+            throw new ValidationException($"Send between 1 and {Quiz.MaxQuestions} answers.");
         if (results.Any(r => string.IsNullOrWhiteSpace(r.CardId)) || results.Select(r => r.CardId).Distinct().Count() != results.Count)
             throw new ValidationException("Each answer needs a different card_id.");
 
-        var today = clock.Today();
-        if (await repository.FindQuizResultAsync(today, code, ct) is not null)
-            throw new ConflictException("Today's quiz is already done - come back tomorrow.");
-
         // A wrong answer means the card was forgotten: it comes back in today's review.
+        var today = clock.Today();
         foreach (var wrong in results.Where(r => !r.Correct))
         {
             var card = await repository.FindCardAsync(wrong.CardId!, ct);
             if (card is not null && card.Language == code) card.Review(ReviewGrade.Again, today);
         }
 
-        var result = new QuizResult(today, code, results.Count(r => r.Correct), results.Count, clock.GetUtcNow());
+        var result = new QuizResult(today, code, mode, results.Count(r => r.Correct), results.Count, clock.GetUtcNow());
         repository.Add(result);
         await repository.SaveChangesAsync(ct);
         return QuizResultDto.From(result);
+    }
+
+    /// <summary>Your latest quiz scores in a language, newest first.</summary>
+    public async Task<IReadOnlyList<QuizResultDto>> QuizHistoryAsync(string? language, CancellationToken ct)
+    {
+        var code = Languages.Require(language);
+        var results = await repository.QuizResultsAsync(code, ct);
+        // SQLite cannot sort DateTimeOffset columns, so the (small) list is sorted here.
+        return results.OrderByDescending(r => r.CompletedAt).ThenByDescending(r => r.Id).Take(HistorySize).Select(QuizResultDto.From).ToList();
     }
 
     public async Task<LingoStats> StatsAsync(string? language, CancellationToken ct)
@@ -150,13 +183,7 @@ public sealed class LingoService(ILingoRepository repository, ITranslator transl
         var code = language is null ? null : Languages.Require(language);
         var today = clock.Today();
         var cards = await repository.CardsAsync(code, ct);
-        var days = (await repository.QuizResultsAsync(null, ct)).Select(r => (r.Day, r.Language)).ToList();
-        return new LingoStats(
-            cards.Count,
-            cards.Count(c => c.IsDue(today)),
-            cards.Count(c => c.Repetitions >= LearnedAfter),
-            Streak.Count(days.Select(d => d.Day), today),
-            days.Any(d => d.Day == today && (code is null || d.Language == code)));
+        return new LingoStats(cards.Count, cards.Count(c => c.IsDue(today)), cards.Count(c => c.Repetitions >= LearnedAfter));
     }
 
     private async Task<Card> RequireCardAsync(string id, CancellationToken ct) =>

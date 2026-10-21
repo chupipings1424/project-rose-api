@@ -27,9 +27,6 @@ internal sealed class EfLingoRepository(LingoDbContext db) : ILingoRepository
     public Task<List<QuizResult>> QuizResultsAsync(string? language, CancellationToken ct) =>
         db.QuizResults.Where(r => language == null || r.Language == language).ToListAsync(ct);
 
-    public Task<QuizResult?> FindQuizResultAsync(DateOnly day, string language, CancellationToken ct) =>
-        db.QuizResults.FirstOrDefaultAsync(r => r.Day == day && r.Language == language, ct);
-
     public void Add(QuizResult result) => db.QuizResults.Add(result);
 
     public Task SaveChangesAsync(CancellationToken ct) => db.SaveChangesAsync(ct);

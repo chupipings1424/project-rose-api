@@ -3,4 +3,7 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Rose.UnitTests" />
   </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Lingo\Pinyin.txt" LogicalName="Rose.Domain.Lingo.Pinyin.txt" />
+  </ItemGroup>
 </Project>

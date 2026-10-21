@@ -24,8 +24,6 @@ public interface ILingoRepository
 
     Task<List<QuizResult>> QuizResultsAsync(string? language, CancellationToken ct);
 
-    Task<QuizResult?> FindQuizResultAsync(DateOnly day, string language, CancellationToken ct);
-
     void Add(QuizResult result);
 
     /// <summary>Writes every change made since the last save in one transaction (unit of work).</summary>

@@ -1,5 +1,6 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Rose.Domain.Lingo;
 using Rose.Infrastructure.Lingo;
 
@@ -46,15 +47,37 @@ public sealed class LingoDbContextTests : IDisposable
     }
 
     [Fact]
-    public async Task Only_one_quiz_result_per_day_and_language()
+    public async Task Any_number_of_quizzes_a_day_are_kept()
     {
         await using var db = NewContext();
         await db.Database.MigrateAsync();
         var day = new DateOnly(2026, 10, 21);
-        db.QuizResults.Add(new QuizResult(day, "ja", 5, 5, DateTimeOffset.UnixEpoch));
-        db.QuizResults.Add(new QuizResult(day, "ja", 3, 5, DateTimeOffset.UnixEpoch));
+        db.QuizResults.Add(new QuizResult(day, "zh-Hans", QuizMode.Random, 5, 5, DateTimeOffset.UnixEpoch));
+        db.QuizResults.Add(new QuizResult(day, "zh-Hans", QuizMode.Custom, 3, 5, DateTimeOffset.UnixEpoch));
+        await db.SaveChangesAsync();
 
-        await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
+        await using var again = NewContext();
+        var modes = await again.QuizResults.Select(r => r.Mode).ToListAsync();
+        Assert.Equal([QuizMode.Random, QuizMode.Custom], modes.Order());
+        Assert.Equal("Custom", await again.Database.SqlQueryRaw<string>("SELECT Mode AS Value FROM QuizResults WHERE Score = 3").SingleAsync());
+    }
+
+    [Fact]
+    public async Task Upgrading_deletes_the_old_daily_quiz_scores_but_keeps_the_cards()
+    {
+        await using var db = NewContext();
+        var migrator = db.GetService<Microsoft.EntityFrameworkCore.Migrations.IMigrator>();
+        var all = db.Database.GetMigrations().ToList();
+        await migrator.MigrateAsync(all[^2]);
+        await db.Database.ExecuteSqlRawAsync(
+            "INSERT INTO QuizResults (Day, Language, Score, Total, CompletedAt) VALUES ('2026-10-20', 'ja', 4, 5, '2026-10-20 10:00:00+00:00')");
+        db.Cards.Add(new Card("ja", "ねこ", "", "Cat", "", DateTimeOffset.UnixEpoch, new DateOnly(2026, 10, 21)));
+        await db.SaveChangesAsync();
+
+        await migrator.MigrateAsync(all[^1]);
+
+        Assert.Equal(0, await db.QuizResults.CountAsync());
+        Assert.Equal(1, await db.Cards.CountAsync());
     }
 
     public void Dispose() => _connection.Dispose();

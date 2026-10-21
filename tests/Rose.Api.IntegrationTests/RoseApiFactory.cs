@@ -58,13 +58,19 @@ public sealed class RoseApiFactory : WebApplicationFactory<Program>
     }
 }
 
-/// <summary>Answers "[to] text", and fails like MyMemory does when asked to translate "offline".</summary>
+/// <summary>
+/// Answers "[to] text"; translating "broken" fails like a corrupt model and "uninstalled" like a missing one.
+/// </summary>
 internal sealed class FakeTranslator : ITranslator
 {
-    public Task<string> TranslateAsync(string text, string from, string to, CancellationToken ct) =>
-        text == "offline"
-            ? throw new UpstreamException("The translator is not reachable right now - check your internet and try again.")
-            : Task.FromResult(to == "ja" && text == "thank you" ? "ありがとう" : $"[{to}] {text}");
+    public Task<string> TranslateAsync(string text, string from, string to, CancellationToken ct) => text switch
+    {
+        "broken" => throw new UpstreamException("The offline translator failed on that text - try a shorter sentence."),
+        "uninstalled" => throw new UnavailableException("The offline translator isn't installed yet - run setup-lingo.cmd."),
+        _ => Task.FromResult(to == "ja" && text == "thank you" ? "ありがとう" : $"[{to}] {text}"),
+    };
+
+    public TranslatorStatus Status() => new(Installed: true, Loaded: false, Engine: "fake", Message: "Ready (offline).");
 }
 
 internal static class HttpExtensions

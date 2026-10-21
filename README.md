@@ -20,10 +20,10 @@ A clean, layered solution. Dependencies point inwards only.
 ```
 src/
   Rose.Domain          pure rules: schedules, budget maths, reports, reminder repeats,
-                       spaced repetition, romaji / hangul romanization (no I/O)
+                       spaced repetition, quizzes, romaji / hangul / pinyin readings (no I/O)
   Rose.Application     use cases (services) + interfaces for the outside world
   Rose.Infrastructure  Excel (ClosedXML), JSON files, SQLite (EF Core), CSV/XLSX import,
-                       Web Push, desktop alarm, MyMemory translator
+                       Web Push, desktop alarm, offline translator (NLLB-200 on ONNX Runtime)
   Rose.Api             controllers, auth (JWT), Swagger, the reminder background worker
 tests/
   Rose.UnitTests            domain + services + real temp workbooks
@@ -74,9 +74,9 @@ variables such as `Reminders__DesktopAlarms=false`):
 | `Reminders:TickInterval` | `00:00:15` | How often due reminders are checked |
 | `Shutdown:Enabled` | `false` | Let ROSE close the API (last tab closed, or the power button). The ROSE launcher sets it to `true` |
 | `Shutdown:IdleTimeout` | `00:00:20` | How long to wait after the last ROSE page disconnected |
-| `Lingo:TranslatorBaseUrl` | `https://api.mymemory.translated.net/` | The free MyMemory translation API |
-| `Lingo:TranslatorEmail` | *(empty)* | Optional: raises MyMemory's free limit from 5,000 to 50,000 characters a day |
-| `Lingo:TranslatorTimeout` | `00:00:10` | Give up on a slow translation after this long |
+| `Lingo:ModelDirectory` | `models/nllb-200-distilled-600M` | The offline translation model (relative to `DataDirectory`) |
+| `Lingo:UnloadAfterIdle` | `00:10:00` | Free the model's memory (about 1.2 GB) after this long without a translation |
+| `Lingo:MaxTokens` | `256` | Longest translation of one sentence, in tokens |
 
 ### Auto-close
 
@@ -113,7 +113,7 @@ The port was also checked response-for-response against the original Flask and N
 | Auth | `POST /api/auth/login`, `GET /api/auth/session` |
 | Payment Tracker | `/api/payment-tracker/` `accounts`, `summary/{title}`, `payments`, `budget`, `report/summary`, `import/*`, `download`, `home-stats` |
 | Reminders | `/api/reminders/` `status`, `items`, `items/{id}/complete\|dismiss\|snooze`, `push/key\|subscribe\|unsubscribe\|test` |
-| ROSE Lingo | `/api/lingo/` `languages`, `kana`, `translate`, `cards` (CRUD), `cards/due`, `cards/{id}/review`, `starter/{language}`, `quiz` (GET + POST), `stats` |
+| ROSE Lingo | `/api/lingo/` `languages`, `kana`, `hangul`, `translator` (status), `translate`, `cards` (CRUD), `cards/due`, `cards/{id}/review`, `starter/{language}`, `quiz` (POST: random `count` or picked `card_ids`), `quiz/results` (GET history, POST score), `stats` |
 | System | `GET /api/system/info`, `GET /api/system/presence`, `POST /api/system/shutdown` |
 | Health | `GET /health` |
 
@@ -132,8 +132,23 @@ Full, interactive documentation: Swagger.
 
   The full walkthrough is in the UI repo's
   [LEARNING.md, section 15](https://github.com/chupipings1424/project-rose/blob/main/LEARNING.md#15-rose-lingo-a-real-database-sqlite--ef-core).
-- **Translation:** `MyMemoryTranslator` (free, no key, about 5,000 characters a day per IP).
-  The text you translate is sent to MyMemory, nothing else is. When it is unreachable (offline,
-  or blocked by a company network) the API answers **502** with a friendly message.
-- **Spaced repetition:** `Rose.Domain/Lingo/Srs.cs` (SM-2). The daily quiz is optional, one per
-  language per day (a unique index enforces it); wrong answers send the card back to review.
+- **Languages:** Tagalog, English, Japanese, Korean, Chinese (Simplified and Traditional), German.
+- **Translation, fully offline:** `NllbTranslator` runs **NLLB-200 distilled 600M** (quantized
+  ONNX) with `Microsoft.ML.OnnxRuntime` and `Microsoft.ML.Tokenizers`. Nothing leaves the PC.
+  The model is not in git. Install it once per PC:
+
+  ```powershell
+  .\setup-lingo.cmd    # needs internet (Hugging Face); ~1 GB into data\models\nllb-200-distilled-600M
+  ```
+
+  It resumes broken downloads and skips files that already exist. For a PC without
+  internet, copy `data\models` from a PC that ran it, then restart the API. Without the model,
+  `GET /api/lingo/translator` reports `installed: false` and `translate` answers **503** with
+  these instructions; everything else works. The first translation loads the model (a few
+  seconds); it is unloaded again after `UnloadAfterIdle`.
+- **Readings:** romaji, Revised Romanization of Korean and pinyin are rule-based
+  (`Rose.Domain/Lingo`); the pinyin table comes from *pypinyin* (MIT).
+- **Quizzes:** on demand only. `POST quiz` with `count` (5, 10 or 20 random cards) or `card_ids`
+  (your own pick); needs at least 4 cards in the deck. `POST quiz/results` saves the score;
+  wrong answers send the card back to review. **Spaced repetition:** `Rose.Domain/Lingo/Srs.cs` (SM-2).
+- **Licence:** the NLLB-200 model is **CC-BY-NC 4.0**, personal / non-commercial use only.

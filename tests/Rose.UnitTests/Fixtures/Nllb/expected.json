@@ -1,0 +1,83 @@
+{
+  "pieces": 64,
+  "cases": [
+    {
+      "text": "Hello, how are you today?",
+      "tag": "eng_Latn",
+      "ids": [
+        111,
+        28,
+        60,
+        30,
+        40,
+        40,
+        33,
+        48,
+        28,
+        37,
+        33,
+        57,
+        13,
+        7,
+        27,
+        22,
+        5,
+        33,
+        42,
+        29,
+        45,
+        44,
+        2
+      ],
+      "decoded": "Hello, how are you today?"
+    },
+    {
+      "text": "Salamat po, kaibigan.",
+      "tag": "tgl_Latn",
+      "ids": [
+        238,
+        28,
+        63,
+        17,
+        29,
+        43,
+        8,
+        28,
+        64,
+        33,
+        48,
+        26,
+        29,
+        35,
+        52,
+        35,
+        38,
+        4,
+        39,
+        2
+      ],
+      "decoded": "Salamat po, kaibigan."
+    },
+    {
+      "text": "Danke schön 你!",
+      "tag": "deu_Latn",
+      "ids": [
+        106,
+        28,
+        58,
+        4,
+        47,
+        30,
+        28,
+        36,
+        9,
+        3,
+        31,
+        28,
+        3,
+        2
+      ],
+      "decoded": "Danke sch ⁇ n  ⁇ "
+    }
+  ]
+}

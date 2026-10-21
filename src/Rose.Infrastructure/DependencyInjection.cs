@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Rose.Application.Abstractions;
 using Rose.Application.Reminders;
@@ -11,6 +12,7 @@ using Rose.Domain.Reminders;
 using Rose.Infrastructure.Excel;
 using Rose.Infrastructure.Importing;
 using Rose.Infrastructure.Lingo;
+using Rose.Infrastructure.Lingo.Translation;
 using Rose.Infrastructure.Reminders;
 using Rose.Infrastructure.Storage;
 
@@ -68,11 +70,15 @@ public static class DependencyInjection
         services.AddScoped<ILingoRepository, EfLingoRepository>();
         services.AddHostedService<LingoDatabaseMigrator>();
 
-        services.AddHttpClient<ITranslator, MyMemoryTranslator>((sp, http) =>
+        // One translator for the whole app: the model is big, so every request shares it.
+        services.AddSingleton<ITranslator>(sp =>
         {
             var options = sp.GetRequiredService<IOptions<LingoOptions>>().Value;
-            http.BaseAddress = new Uri(options.TranslatorBaseUrl.TrimEnd('/') + "/");
-            http.Timeout = options.TranslatorTimeout;
+            return new NllbTranslator(
+                NllbModelFiles.In(DataFile(sp, options.ModelDirectory)),
+                options,
+                sp.GetRequiredService<TimeProvider>(),
+                sp.GetRequiredService<ILogger<NllbTranslator>>());
         });
     }
 

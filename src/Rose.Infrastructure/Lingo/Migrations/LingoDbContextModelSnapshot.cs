@@ -37,7 +37,7 @@ namespace Rose.Infrastructure.Lingo.Migrations
 
                     b.Property<string>("Language")
                         .IsRequired()
-                        .HasMaxLength(2)
+                        .HasMaxLength(7)
                         .HasColumnType("TEXT");
 
                     b.Property<int>("Lapses")
@@ -92,7 +92,12 @@ namespace Rose.Infrastructure.Lingo.Migrations
 
                     b.Property<string>("Language")
                         .IsRequired()
-                        .HasMaxLength(2)
+                        .HasMaxLength(7)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Mode")
+                        .IsRequired()
+                        .HasMaxLength(10)
                         .HasColumnType("TEXT");
 
                     b.Property<int>("Score")
@@ -103,8 +108,7 @@ namespace Rose.Infrastructure.Lingo.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Day", "Language")
-                        .IsUnique();
+                    b.HasIndex("Language");
 
                     b.ToTable("QuizResults", (string)null);
                 });

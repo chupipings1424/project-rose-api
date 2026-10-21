@@ -44,9 +44,50 @@ public sealed class RomanizerTests
     public void Hangul_becomes_revised_romanization(string hangul, string latin) =>
         Assert.Equal(latin, Romanizer.Romanize(Languages.Korean, hangul));
 
+    [Theory]
+    [InlineData(Languages.ChineseSimplified, "你好", "nǐ hǎo")]
+    [InlineData(Languages.ChineseSimplified, "谢谢", "xiè xiè")]
+    [InlineData(Languages.ChineseTraditional, "謝謝", "xiè xiè")]
+    [InlineData(Languages.ChineseSimplified, "我爱你", "wǒ ài nǐ")]
+    [InlineData(Languages.ChineseTraditional, "我愛你", "wǒ ài nǐ")]
+    [InlineData(Languages.ChineseSimplified, "中国", "zhōng guó")]
+    [InlineData(Languages.ChineseSimplified, "你好, ROSE!", "nǐ hǎo , ROSE!")]
+    public void Chinese_becomes_pinyin_with_tone_marks(string language, string hanzi, string pinyin) =>
+        Assert.Equal(pinyin, Romanizer.Romanize(language, hanzi));
+
     [Fact]
-    public void German_and_English_have_no_reading() =>
-        Assert.Equal("", Romanizer.Romanize(Languages.German, "Danke"));
+    public void Chinese_without_hanzi_has_no_reading() =>
+        Assert.Equal("", Romanizer.Romanize(Languages.ChineseSimplified, "hello"));
+
+    [Theory]
+    [InlineData(Languages.German, "Danke")]
+    [InlineData(Languages.English, "Thanks")]
+    [InlineData(Languages.Tagalog, "Salamat")]
+    public void Latin_alphabet_languages_have_no_reading(string language, string text) =>
+        Assert.Equal("", Romanizer.Romanize(language, text));
+
+    [Fact]
+    public void The_hangul_chart_has_all_forty_letters_with_example_blocks()
+    {
+        Assert.Equal(40, HangulChart.Chart.Count);
+        Assert.Equal(40, HangulChart.Chart.Select(h => h.Letter).Distinct().Count());
+        Assert.Equal((14, 5, 10, 11), (
+            HangulChart.Chart.Count(h => h.Group == "consonant"),
+            HangulChart.Chart.Count(h => h.Group == "double"),
+            HangulChart.Chart.Count(h => h.Group == "vowel"),
+            HangulChart.Chart.Count(h => h.Group == "compound")));
+        Assert.Contains(HangulChart.Chart, h => h is { Letter: "ㄱ", Syllable: "가", SyllableRomanization: "ga" });
+        Assert.Contains(HangulChart.Chart, h => h is { Letter: "ㅎ", Syllable: "하", SyllableRomanization: "ha" });
+        Assert.Contains(HangulChart.Chart, h => h is { Letter: "ㅉ", Syllable: "짜", SyllableRomanization: "jja" });
+        Assert.Contains(HangulChart.Chart, h => h is { Letter: "ㅓ", Syllable: "어", SyllableRomanization: "eo" });
+        Assert.Contains(HangulChart.Chart, h => h is { Letter: "ㅢ", Syllable: "의", SyllableRomanization: "ui" });
+    }
+
+    [Fact]
+    public void Every_vowel_example_reads_as_its_own_romanization() =>
+        Assert.All(
+            HangulChart.Chart.Where(h => h.Group is "vowel" or "compound"),
+            h => Assert.Equal(h.Romanization, h.SyllableRomanization));
 
     [Fact]
     public void The_kana_chart_pairs_hiragana_with_katakana()

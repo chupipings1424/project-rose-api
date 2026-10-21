@@ -9,16 +9,24 @@ public sealed class LingoTests(RoseApiFactory factory) : IClassFixture<RoseApiFa
     private static Uri Url(string path) => new($"/api/lingo/{path}", UriKind.Relative);
 
     [Fact]
-    public async Task Languages_and_kana_are_listed()
+    public async Task Languages_kana_hangul_and_translator_status_are_listed()
     {
         var client = await factory.CreateAuthenticatedClientAsync();
 
         var languages = await (await client.GetAsync(Url("languages"))).JsonAsync();
-        Assert.Equal(["ja", "ko", "de", "en"], languages.EnumerateArray().Select(l => l.GetProperty("code").GetString()));
-        Assert.Equal("ko-KR", languages[1].GetProperty("speech").GetString());
+        Assert.Equal(["tl", "en", "ja", "ko", "zh-Hans", "zh-Hant", "de"], languages.EnumerateArray().Select(l => l.GetProperty("code").GetString()));
+        Assert.Equal("fil-PH", languages[0].GetProperty("speech").GetString());
 
         var kana = await (await client.GetAsync(Url("kana"))).JsonAsync();
         Assert.Contains(kana.EnumerateArray(), k => k.GetProperty("hiragana").GetString() == "あ" && k.GetProperty("katakana").GetString() == "ア");
+
+        var hangul = await (await client.GetAsync(Url("hangul"))).JsonAsync();
+        Assert.Equal(40, hangul.GetArrayLength());
+        Assert.Contains(hangul.EnumerateArray(), h => h.GetProperty("letter").GetString() == "ㄱ" && h.GetProperty("syllable").GetString() == "가");
+
+        var status = await (await client.GetAsync(Url("translator"))).JsonAsync();
+        Assert.True(status.GetProperty("installed").GetBoolean());
+        Assert.Equal("fake", status.GetProperty("engine").GetString());
     }
 
     [Fact]
@@ -32,21 +40,28 @@ public sealed class LingoTests(RoseApiFactory factory) : IClassFixture<RoseApiFa
         var body = await response.JsonAsync();
         Assert.Equal("ありがとう", body.GetProperty("translation").GetString());
         Assert.Equal("arigatou", body.GetProperty("translation_reading").GetString());
+
+        var chinese = await (await client.PostAsJsonAsync(Url("translate"), new { text = "你好", from = "ZH-hans", to = "tl" })).JsonAsync();
+        Assert.Equal("nǐ hǎo", chinese.GetProperty("text_reading").GetString());
+        Assert.Equal("zh-Hans", chinese.GetProperty("from").GetString());
     }
 
     [Fact]
-    public async Task Translator_failures_are_a_502_and_bad_requests_a_400()
+    public async Task Translator_failures_are_a_502_or_503_and_bad_requests_a_400()
     {
         var client = await factory.CreateAuthenticatedClientAsync();
 
-        var offline = await client.PostAsJsonAsync(Url("translate"), new { text = "offline", from = "en", to = "de" });
-        Assert.Equal(HttpStatusCode.BadGateway, offline.StatusCode);
-        Assert.Contains("not reachable", await offline.DetailAsync(), StringComparison.Ordinal);
+        var broken = await client.PostAsJsonAsync(Url("translate"), new { text = "broken", from = "en", to = "de" });
+        Assert.Equal(HttpStatusCode.BadGateway, broken.StatusCode);
+
+        var uninstalled = await client.PostAsJsonAsync(Url("translate"), new { text = "uninstalled", from = "tl", to = "en" });
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, uninstalled.StatusCode);
+        Assert.Contains("setup-lingo.cmd", await uninstalled.DetailAsync(), StringComparison.Ordinal);
 
         var same = await client.PostAsJsonAsync(Url("translate"), new { text = "hi", from = "en", to = "en" });
         Assert.Equal(HttpStatusCode.BadRequest, same.StatusCode);
         var unknown = await client.PostAsJsonAsync(Url("translate"), new { text = "salut", from = "fr", to = "en" });
-        Assert.Equal("from must be one of ja, ko, de, en.", await unknown.DetailAsync());
+        Assert.Equal("from must be one of tl, en, ja, ko, zh-Hans, zh-Hant, de.", await unknown.DetailAsync());
     }
 
     [Fact]
@@ -86,11 +101,11 @@ public sealed class LingoTests(RoseApiFactory factory) : IClassFixture<RoseApiFa
     }
 
     [Fact]
-    public async Task Starter_deck_feeds_a_daily_quiz_that_can_be_taken_once()
+    public async Task Quizzes_can_be_taken_or_made_any_number_of_times()
     {
         var client = await factory.CreateAuthenticatedClientAsync();
 
-        var empty = await (await client.GetAsync(Url("quiz?language=de"))).JsonAsync();
+        var empty = await (await client.PostAsJsonAsync(Url("quiz"), new { language = "de", count = 5 })).JsonAsync();
         Assert.Equal(0, empty.GetProperty("questions").GetArrayLength());
         Assert.Equal(4, empty.GetProperty("cards_needed").GetInt32());
 
@@ -99,27 +114,39 @@ public sealed class LingoTests(RoseApiFactory factory) : IClassFixture<RoseApiFa
         var again = await (await client.PostAsync(Url("starter/de"), content: null)).JsonAsync();
         Assert.Equal(0, again.GetProperty("added").GetInt32());
 
-        var quiz = await (await client.GetAsync(Url("quiz?language=de"))).JsonAsync();
+        var badCount = await client.PostAsJsonAsync(Url("quiz"), new { language = "de", count = 7 });
+        Assert.Equal(HttpStatusCode.BadRequest, badCount.StatusCode);
+
+        var quiz = await (await client.PostAsJsonAsync(Url("quiz"), new { language = "de", count = 5 })).JsonAsync();
+        Assert.Equal("random", quiz.GetProperty("mode").GetString());
         var questions = quiz.GetProperty("questions").EnumerateArray().ToList();
         Assert.Equal(5, questions.Count);
         Assert.All(questions, q => Assert.Contains(q.GetProperty("kind").GetString(), new[] { "meaning", "term", "listen" }));
 
         var wrongId = questions[0].GetProperty("card_id").GetString();
         var results = questions.Select((q, i) => new { card_id = q.GetProperty("card_id").GetString(), correct = i > 0 }).ToList();
-        var submitted = await client.PostAsJsonAsync(Url("quiz"), new { language = "de", results });
+        var submitted = await client.PostAsJsonAsync(Url("quiz/results"), new { language = "de", mode = "random", results });
         Assert.Equal(HttpStatusCode.OK, submitted.StatusCode);
         Assert.Equal(4, (await submitted.JsonAsync()).GetProperty("score").GetInt32());
 
-        var twice = await client.PostAsJsonAsync(Url("quiz"), new { language = "de", results });
-        Assert.Equal(HttpStatusCode.Conflict, twice.StatusCode);
+        var picked = questions.Take(2).Select(q => q.GetProperty("card_id").GetString()).ToList();
+        var made = await (await client.PostAsJsonAsync(Url("quiz"), new { language = "de", card_ids = picked })).JsonAsync();
+        Assert.Equal("custom", made.GetProperty("mode").GetString());
+        Assert.Equal(picked.Order(), made.GetProperty("questions").EnumerateArray().Select(q => q.GetProperty("card_id").GetString()).Order());
+        var perfect = picked.Select(id => new { card_id = id, correct = true }).ToList();
+        var second = await client.PostAsJsonAsync(Url("quiz/results"), new { language = "de", mode = "custom", results = perfect });
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
 
-        var done = await (await client.GetAsync(Url("quiz?language=de"))).JsonAsync();
-        Assert.Equal(4, done.GetProperty("completed").GetProperty("score").GetInt32());
-        Assert.Equal(0, done.GetProperty("questions").GetArrayLength());
+        var missing = await client.PostAsJsonAsync(Url("quiz"), new { language = "de", card_ids = new[] { "nope" } });
+        Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);
+
+        var history = (await (await client.GetAsync(Url("quiz/results?language=de"))).JsonAsync()).EnumerateArray().ToList();
+        Assert.Equal(["custom", "random"], history.Select(h => h.GetProperty("mode").GetString()));
+        Assert.Equal(2, history[0].GetProperty("score").GetInt32());
 
         var stats = await (await client.GetAsync(Url("stats?language=de"))).JsonAsync();
-        Assert.True(stats.GetProperty("quiz_done_today").GetBoolean());
-        Assert.Equal(1, stats.GetProperty("streak").GetInt32());
+        Assert.True(stats.GetProperty("cards").GetInt32() > 4);
+        Assert.False(stats.TryGetProperty("streak", out _));
 
         var forgotten = await (await client.GetAsync(Url("cards?language=de"))).JsonAsync();
         var card = forgotten.EnumerateArray().Single(c => c.GetProperty("id").GetString() == wrongId);

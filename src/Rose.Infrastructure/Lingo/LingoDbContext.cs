@@ -29,7 +29,7 @@ internal sealed class CardConfiguration : IEntityTypeConfiguration<Card>
         card.ToTable("Cards");
         card.HasKey(c => c.Id);
         card.Property(c => c.Id).HasMaxLength(36);
-        card.Property(c => c.Language).HasMaxLength(2).IsRequired();
+        card.Property(c => c.Language).HasMaxLength(Languages.MaxCodeLength).IsRequired();
         card.Property(c => c.Term).HasMaxLength(Card.MaxTextLength).IsRequired();
         card.Property(c => c.Reading).HasMaxLength(Card.MaxTextLength).IsRequired();
         card.Property(c => c.Meaning).HasMaxLength(Card.MaxTextLength).IsRequired();
@@ -47,9 +47,12 @@ internal sealed class QuizResultConfiguration : IEntityTypeConfiguration<QuizRes
     {
         result.ToTable("QuizResults");
         result.HasKey(r => r.Id);
-        result.Property(r => r.Language).HasMaxLength(2).IsRequired();
+        result.Property(r => r.Language).HasMaxLength(Languages.MaxCodeLength).IsRequired();
 
-        // The database itself refuses a second quiz for the same day and language.
-        result.HasIndex(r => new { r.Day, r.Language }).IsUnique();
+        // Stored as "Random" / "Custom" rather than 0 / 1, so the table reads well in a SQLite browser.
+        result.Property(r => r.Mode).HasConversion<string>().HasMaxLength(10);
+
+        // The history screen lists one language's quizzes.
+        result.HasIndex(r => r.Language);
     }
 }

@@ -2,7 +2,7 @@ namespace Rose.Domain.Lingo;
 
 public sealed record StarterWord(string Term, string Reading, string Meaning, string Notes = "");
 
-/// <summary>A few everyday words per language, so the review and the quiz work from day one.</summary>
+/// <summary>A few everyday words per language, so the flashcards and quizzes work from day one.</summary>
 public static class StarterDecks
 {
     public static readonly IReadOnlyDictionary<string, IReadOnlyList<StarterWord>> All =
@@ -58,6 +58,61 @@ public static class StarterDecks
                 new("der Hund", "", "Dog"),
                 new("lecker", "", "Delicious"),
                 new("Ich liebe dich", "", "I love you"),
+            ],
+            [Languages.Tagalog] =
+            [
+                new("Kumusta", "", "Hello / How are you?"),
+                new("Salamat", "", "Thank you"),
+                new("Maraming salamat", "", "Thank you very much"),
+                new("Oo", "", "Yes"),
+                new("Hindi", "", "No"),
+                new("Paalam", "", "Goodbye"),
+                new("Magandang umaga", "", "Good morning"),
+                new("Magandang gabi", "", "Good evening"),
+                new("Pasensya na", "", "Sorry"),
+                new("Mahal kita", "", "I love you"),
+                new("Tubig", "", "Water"),
+                new("Kaibigan", "", "Friend"),
+                new("Pusa", "", "Cat"),
+                new("Aso", "", "Dog"),
+                new("Masarap", "", "Delicious"),
+                new("Kaya mo 'yan", "", "You can do it"),
+            ],
+            [Languages.ChineseSimplified] =
+            [
+                new("你好", "", "Hello"),
+                new("谢谢", "", "Thank you"),
+                new("是", "", "Yes / To be"),
+                new("不是", "", "No / Is not"),
+                new("对不起", "", "I'm sorry"),
+                new("再见", "", "Goodbye"),
+                new("早上好", "", "Good morning"),
+                new("我爱你", "", "I love you"),
+                new("没关系", "", "It's okay / Never mind"),
+                new("好吃", "", "Delicious"),
+                new("水", "", "Water"),
+                new("朋友", "", "Friend"),
+                new("猫", "", "Cat"),
+                new("狗", "", "Dog"),
+                new("加油", "", "Keep going! (You can do it)"),
+            ],
+            [Languages.ChineseTraditional] =
+            [
+                new("你好", "", "Hello"),
+                new("謝謝", "", "Thank you"),
+                new("是", "", "Yes / To be"),
+                new("不是", "", "No / Is not"),
+                new("對不起", "", "I'm sorry"),
+                new("再見", "", "Goodbye"),
+                new("早安", "", "Good morning"),
+                new("我愛你", "", "I love you"),
+                new("沒關係", "", "It's okay / Never mind"),
+                new("好吃", "", "Delicious"),
+                new("水", "", "Water"),
+                new("朋友", "", "Friend"),
+                new("貓", "", "Cat"),
+                new("狗", "", "Dog"),
+                new("加油", "", "Keep going! (You can do it)"),
             ],
         };
 }

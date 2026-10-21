@@ -1,11 +1,12 @@
 using Microsoft.AspNetCore.Mvc;
+using Rose.Application.Abstractions;
 using Rose.Application.Lingo;
 using Rose.Application.Tracker;
 using Rose.Domain.Lingo;
 
 namespace Rose.Api.Controllers;
 
-/// <summary>ROSE Lingo: translate, flashcards with spaced repetition, the daily quiz and kana drills.</summary>
+/// <summary>ROSE Lingo: offline translation, flashcards with spaced repetition, practice quizzes and alphabet drills.</summary>
 [ApiController]
 [Route("api/lingo")]
 [Produces("application/json")]
@@ -14,7 +15,7 @@ namespace Rose.Api.Controllers;
 [ProducesResponseType(StatusCodes.Status401Unauthorized)]
 public sealed class LingoController(LingoService lingo) : ControllerBase
 {
-    /// <summary>The languages you can learn: ja, ko, de and en.</summary>
+    /// <summary>The languages: tl, en, ja, ko, zh-Hans, zh-Hant and de.</summary>
     [HttpGet("languages")]
     public IReadOnlyList<LanguageInfo> Languages() => LingoService.AllLanguages();
 
@@ -22,10 +23,20 @@ public sealed class LingoController(LingoService lingo) : ControllerBase
     [HttpGet("kana")]
     public IReadOnlyList<KanaEntry> KanaChart() => LingoService.KanaChart();
 
-    /// <summary>Translate up to 500 characters with MyMemory (online; do not send anything private).</summary>
-    /// <response code="502">The translator is offline or today's free limit is used up.</response>
+    /// <summary>Every Hangul letter with its romanization, name and an example block, for the Hangul drills.</summary>
+    [HttpGet("hangul")]
+    public IReadOnlyList<HangulEntry> HangulChart() => LingoService.HangulChart();
+
+    /// <summary>Is the offline translation model installed (run setup-lingo.cmd) and loaded?</summary>
+    [HttpGet("translator")]
+    public TranslatorStatus Translator() => lingo.TranslatorStatus();
+
+    /// <summary>Translate up to 500 characters on this PC with NLLB-200. Nothing leaves your computer.</summary>
+    /// <response code="502">The model failed to translate.</response>
+    /// <response code="503">The model is not installed yet: run setup-lingo.cmd.</response>
     [HttpPost("translate")]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status502BadGateway)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status503ServiceUnavailable)]
     public Task<TranslationResult> Translate(TranslateRequest request, CancellationToken ct) =>
         lingo.TranslateAsync(request, ct);
 
@@ -37,7 +48,7 @@ public sealed class LingoController(LingoService lingo) : ControllerBase
     [HttpGet("cards/due")]
     public Task<IReadOnlyList<CardDto>> Due([FromQuery] string? language, CancellationToken ct) => lingo.DueAsync(language, ct);
 
-    /// <summary>Add a card. Japanese kana and Korean get their reading filled in automatically.</summary>
+    /// <summary>Add a card. Japanese kana, Korean and Chinese get their reading filled in automatically.</summary>
     /// <response code="409">You already have a card for that word.</response>
     [HttpPost("cards")]
     [ProducesResponseType<CardDto>(StatusCodes.Status201Created)]
@@ -65,21 +76,27 @@ public sealed class LingoController(LingoService lingo) : ControllerBase
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     public Task<CardDto> Review(string id, ReviewRequest request, CancellationToken ct) => lingo.ReviewAsync(id, request, ct);
 
-    /// <summary>Add the built-in everyday words for ja, ko or de. Words you already have are skipped.</summary>
+    /// <summary>Add the built-in everyday words for any language but English. Words you already have are skipped.</summary>
     [HttpPost("starter/{language}")]
     public Task<StarterImportResult> ImportStarter(string language, CancellationToken ct) => lingo.ImportStarterAsync(language, ct);
 
-    /// <summary>Today's five questions for one language (the same all day). Needs at least 4 cards.</summary>
-    [HttpGet("quiz")]
-    public Task<QuizDto> Quiz([FromQuery] string? language, CancellationToken ct) => lingo.QuizAsync(language, ct);
-
-    /// <summary>Save today's score. Wrong answers go back into today's review.</summary>
-    /// <response code="409">Today's quiz for that language is already done.</response>
+    /// <summary>
+    /// A new quiz: <c>count</c> 5, 10 or 20 random cards ("Take a quiz"), or the <c>card_ids</c> you
+    /// picked ("Make a quiz"). Needs at least 4 cards in the language for the multiple choices.
+    /// </summary>
     [HttpPost("quiz")]
-    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public Task<QuizDto> Quiz(QuizRequest request, CancellationToken ct) => lingo.QuizAsync(request, ct);
+
+    /// <summary>Save a finished quiz. Wrong answers go back into today's review.</summary>
+    [HttpPost("quiz/results")]
     public Task<QuizResultDto> Submit(QuizSubmitRequest request, CancellationToken ct) => lingo.SubmitQuizAsync(request, ct);
 
-    /// <summary>Card counts, the quiz streak and whether today's quiz is done. Optional <c>?language=</c>.</summary>
+    /// <summary>Your last 30 quiz scores in one language, newest first.</summary>
+    [HttpGet("quiz/results")]
+    public Task<IReadOnlyList<QuizResultDto>> History([FromQuery] string? language, CancellationToken ct) =>
+        lingo.QuizHistoryAsync(language, ct);
+
+    /// <summary>Card counts: total, due now and learned. Optional <c>?language=</c>.</summary>
     [HttpGet("stats")]
     public Task<LingoStats> Stats(string? language, CancellationToken ct) => lingo.StatsAsync(language, ct);
 }

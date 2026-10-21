@@ -12,6 +12,8 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" />
+    <PackageReference Include="Microsoft.ML.Tokenizers" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Reminders\alarm.ps1" LogicalName="Rose.Infrastructure.alarm.ps1" />
