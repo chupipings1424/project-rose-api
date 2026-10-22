@@ -11,9 +11,13 @@ public sealed class LingoOptions
     [Required]
     public string ModelDirectory { get; set; } = Path.Combine("models", "nllb-200-distilled-600M");
 
-    /// <summary>The model takes about 1.2 GB of memory, so it is let go after this long without a translation.</summary>
+    /// <summary>The model takes about 1 GB of memory while loaded, so it is let go after this long without a translation.</summary>
     [Range(typeof(TimeSpan), "00:00:30", "1.00:00:00")]
-    public TimeSpan UnloadAfterIdle { get; set; } = TimeSpan.FromMinutes(10);
+    public TimeSpan UnloadAfterIdle { get; set; } = TimeSpan.FromMinutes(2);
+
+    /// <summary>CPU threads one translation may use. More is a little faster; 2 keeps the PC responsive.</summary>
+    [Range(1, 16)]
+    public int Threads { get; set; } = 2;
 
     /// <summary>The longest translation (in tokens, roughly word pieces) of one sentence.</summary>
     [Range(16, 1024)]

@@ -28,7 +28,7 @@ internal sealed partial class NllbTranslator : ITranslator, IDisposable
     private (ITranslationModel Model, NllbVocabulary Vocabulary)? _loaded;
 
     public NllbTranslator(NllbModelFiles files, LingoOptions options, TimeProvider clock, ILogger<NllbTranslator> logger)
-        : this(files, options, clock, logger, f => OnnxTranslationModel.Load(f))
+        : this(files, options, clock, logger, f => OnnxTranslationModel.Load(f, options.Threads))
     {
     }
 

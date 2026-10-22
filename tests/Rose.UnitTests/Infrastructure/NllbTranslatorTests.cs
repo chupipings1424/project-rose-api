@@ -104,6 +104,18 @@ public sealed class NllbTranslatorTests
     }
 
     [Fact]
+    public void Defaults_keep_memory_and_cpu_low_and_bad_values_are_rejected()
+    {
+        Assert.Equal(TimeSpan.FromMinutes(2), Options.UnloadAfterIdle);
+        Assert.Equal(2, Options.Threads);
+
+        var results = new List<System.ComponentModel.DataAnnotations.ValidationResult>();
+        var bad = new LingoOptions { Threads = 0, UnloadAfterIdle = TimeSpan.FromSeconds(5) };
+        Assert.False(System.ComponentModel.DataAnnotations.Validator.TryValidateObject(bad, new(bad), results, validateAllProperties: true));
+        Assert.Equal(["Threads", "UnloadAfterIdle"], results.SelectMany(r => r.MemberNames).Order());
+    }
+
+    [Fact]
     public void Greedy_search_feeds_the_prefix_then_each_pick_and_stops_at_the_end_or_the_limit()
     {
         var model = new FakeModel { Script = [7, 8, 9, NllbVocabulary.Eos] };

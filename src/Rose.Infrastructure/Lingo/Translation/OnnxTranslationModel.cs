@@ -27,9 +27,19 @@ internal sealed class OnnxTranslationModel : ITranslationModel
         _merged = merged;
     }
 
-    public static OnnxTranslationModel Load(NllbModelFiles files)
+    public static OnnxTranslationModel Load(NllbModelFiles files, int threads)
     {
-        using var options = new SessionOptions { GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL };
+        using var options = new SessionOptions
+        {
+            GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL,
+            ExecutionMode = ExecutionMode.ORT_SEQUENTIAL,
+            IntraOpNumThreads = threads,
+            InterOpNumThreads = 1,
+            // The arena keeps freed blocks for reuse and memory patterns pre-plan buffers per input
+            // shape. Every sentence has a different length, so both mostly just hold on to memory.
+            EnableCpuMemArena = false,
+            EnableMemoryPattern = false,
+        };
         var sessions = new List<InferenceSession>();
         try
         {

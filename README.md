@@ -75,7 +75,8 @@ variables such as `Reminders__DesktopAlarms=false`):
 | `Shutdown:Enabled` | `false` | Let ROSE close the API (last tab closed, or the power button). The ROSE launcher sets it to `true` |
 | `Shutdown:IdleTimeout` | `00:00:20` | How long to wait after the last ROSE page disconnected |
 | `Lingo:ModelDirectory` | `models/nllb-200-distilled-600M` | The offline translation model (relative to `DataDirectory`) |
-| `Lingo:UnloadAfterIdle` | `00:10:00` | Free the model's memory (about 1.2 GB) after this long without a translation |
+| `Lingo:UnloadAfterIdle` | `00:02:00` | Free the model's memory (about 1 GB) after this long without a translation |
+| `Lingo:Threads` | `2` | CPU threads a translation may use (1-16). More is a little faster |
 | `Lingo:MaxTokens` | `256` | Longest translation of one sentence, in tokens |
 
 ### Auto-close
@@ -145,7 +146,9 @@ Full, interactive documentation: Swagger.
   internet, copy `data\models` from a PC that ran it, then restart the API. Without the model,
   `GET /api/lingo/translator` reports `installed: false` and `translate` answers **503** with
   these instructions; everything else works. The first translation loads the model (a few
-  seconds); it is unloaded again after `UnloadAfterIdle`.
+  seconds); it is unloaded again after `UnloadAfterIdle`. To keep memory low, ONNX Runtime
+  runs without its memory arena or memory patterns (freed memory goes back to Windows) and
+  with `Threads` CPU threads.
 - **Readings:** romaji, Revised Romanization of Korean and pinyin are rule-based
   (`Rose.Domain/Lingo`); the pinyin table comes from *pypinyin* (MIT).
 - **Quizzes:** on demand only. `POST quiz` with `count` (5, 10 or 20 random cards) or `card_ids`
