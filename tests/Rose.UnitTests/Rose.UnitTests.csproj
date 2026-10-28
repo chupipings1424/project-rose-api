@@ -14,10 +14,4 @@
   <ItemGroup>
     <Using Include="Xunit" />
   </ItemGroup>
-  <!-- Tiny NLLB stand-ins made by Fixtures/Nllb/make_fixtures.py; one tokenizer copy serves both layouts. -->
-  <ItemGroup>
-    <None Include="Fixtures\Nllb\**\*.onnx;Fixtures\Nllb\expected.json;Fixtures\Nllb\sentencepiece.bpe.model" CopyToOutputDirectory="PreserveNewest" />
-    <None Include="Fixtures\Nllb\sentencepiece.bpe.model" Link="Fixtures\Nllb\merged\sentencepiece.bpe.model" CopyToOutputDirectory="PreserveNewest" />
-    <None Include="Fixtures\Nllb\sentencepiece.bpe.model" Link="Fixtures\Nllb\split\sentencepiece.bpe.model" CopyToOutputDirectory="PreserveNewest" />
-  </ItemGroup>
 </Project>

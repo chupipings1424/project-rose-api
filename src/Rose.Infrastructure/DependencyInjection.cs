@@ -1,18 +1,13 @@
-using Microsoft.Data.Sqlite;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Rose.Application.Abstractions;
 using Rose.Application.Reminders;
 using Rose.Domain.Reminders;
 using Rose.Infrastructure.Excel;
 using Rose.Infrastructure.Importing;
-using Rose.Infrastructure.Lingo;
-using Rose.Infrastructure.Lingo.Translation;
 using Rose.Infrastructure.Reminders;
 using Rose.Infrastructure.Storage;
 
@@ -53,33 +48,7 @@ public static class DependencyInjection
         services.AddSingleton<IPushSender, WebPushSender>();
         services.AddSingleton<IDesktopAlarm, PowerShellDesktopAlarm>();
 
-        AddLingo(services, configuration);
         return services;
-    }
-
-    private static void AddLingo(IServiceCollection services, IConfiguration configuration)
-    {
-        services.AddOptions<LingoOptions>()
-            .Bind(configuration.GetSection(LingoOptions.Section))
-            .ValidateDataAnnotations()
-            .ValidateOnStart();
-
-        // SqliteConnectionStringBuilder quotes the path, so folders with spaces work.
-        services.AddDbContext<LingoDbContext>((sp, options) =>
-            options.UseSqlite(new SqliteConnectionStringBuilder { DataSource = DataFile(sp, "lingo.db") }.ToString()));
-        services.AddScoped<ILingoRepository, EfLingoRepository>();
-        services.AddHostedService<LingoDatabaseMigrator>();
-
-        // One translator for the whole app: the model is big, so every request shares it.
-        services.AddSingleton<ITranslator>(sp =>
-        {
-            var options = sp.GetRequiredService<IOptions<LingoOptions>>().Value;
-            return new NllbTranslator(
-                NllbModelFiles.In(DataFile(sp, options.ModelDirectory)),
-                options,
-                sp.GetRequiredService<TimeProvider>(),
-                sp.GetRequiredService<ILogger<NllbTranslator>>());
-        });
     }
 
     private static string DataFile(IServiceProvider services, string name) =>

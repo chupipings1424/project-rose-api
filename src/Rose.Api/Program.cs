@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Rose.Api.Auth;
+using Rose.Api.Desktop;
 using Rose.Api.Infrastructure;
 using Rose.Api.Lifetime;
 using Rose.Api.Reminders;
@@ -15,10 +16,28 @@ using Rose.Application.Common;
 using Rose.Infrastructure;
 using Rose.Infrastructure.Reminders;
 
-var builder = WebApplication.CreateBuilder(args);
+// ROSE.exe (the packaged build) reads appsettings*.json and data\ next to itself,
+// wherever it is started from. Normal builds keep the default (the working folder).
+var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+{
+    Args = args,
+    ContentRootPath = DesktopApp.HasEmbeddedUi ? AppContext.BaseDirectory : null,
+});
 
 // Your secrets (Auth:AccessToken) live here, never in git.
 builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
+
+using var desktop = DesktopApp.HasEmbeddedUi ? new DesktopApp(builder.Configuration) : null;
+if (desktop is { AlreadyRunning: true })
+{
+    desktop.OpenBrowser();
+    return;
+}
+if (desktop is not null)
+{
+    // ROSE.exe always closes itself with its last tab (or the power button).
+    builder.Configuration.AddInMemoryCollection([new("Shutdown:Enabled", "true")]);
+}
 
 builder.Services.AddRoseApplication();
 builder.Services.AddRoseInfrastructure(builder.Configuration);
@@ -96,7 +115,7 @@ builder.Services.AddSwaggerGen(options =>
     {
         Title = "Project ROSE API",
         Version = "v1",
-        Description = "Payment Tracker, Reminders and ROSE Lingo for Project ROSE. Click **Authorize**, then call "
+        Description = "Payment Tracker, Budget and Reminders for Project ROSE. Click **Authorize**, then call "
             + "`POST /api/auth/login` with your access token and paste the `access_token` it returns.",
     });
     options.IncludeXmlComments(Path.Combine(AppContext.BaseDirectory, $"{Assembly.GetExecutingAssembly().GetName().Name}.xml"));
@@ -131,17 +150,37 @@ if (app.Environment.IsDevelopment())
     });
 }
 
+// ROSE.exe serves the React app itself; everything else proxies /api through Vite.
+var ui = desktop is null ? null : new StaticFileOptions { FileProvider = DesktopApp.UiFiles() };
+if (ui is not null)
+{
+    app.UseDefaultFiles(new DefaultFilesOptions { FileProvider = ui.FileProvider }); // "/" -> /index.html
+    app.UseStaticFiles(ui);
+}
+
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter();
 
 app.MapHealthChecks("/health").AllowAnonymous();
 app.MapControllers();
-app.MapGet("/", () => Results.Redirect(app.Environment.IsDevelopment() ? "/swagger" : "/health"))
-    .AllowAnonymous()
-    .ExcludeFromDescription();
+if (ui is not null)
+{
+    // Client-side routes (/projects/budget...) all load index.html; React Router takes it from there.
+    // Unknown /api/* addresses still get a real 404 instead of a web page.
+    app.MapFallbackToFile("{*path:nonfile:regex(^(?!api/).*$)}", "index.html", ui)
+        .AllowAnonymous()
+        .ExcludeFromDescription();
+}
+else
+{
+    app.MapGet("/", () => Results.Redirect(app.Environment.IsDevelopment() ? "/swagger" : "/health"))
+        .AllowAnonymous()
+        .ExcludeFromDescription();
+}
 
-await app.RunAsync();
+if (desktop is null) await app.RunAsync();
+else await desktop.RunAsync(app);
 
 /// <summary>Exposed for WebApplicationFactory in the integration tests.</summary>
 public partial class Program;

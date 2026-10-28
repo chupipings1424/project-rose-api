@@ -1,7 +1,7 @@
 # Project ROSE API
 
 The backend for [Project ROSE](https://github.com/chupipings1424/project-rose): a .NET 9 ASP.NET Core
-Web API with Swagger, serving the **Payment Tracker**, **Personal Budget**, **Reminders** and **ROSE Lingo** projects.
+Web API with Swagger, serving the **Payment Tracker**, **Personal Budget** and **Reminders** projects.
 
 ROSE (the React app) is only the UI. This API owns the data:
 
@@ -9,7 +9,6 @@ ROSE (the React app) is only the UI. This API owns the data:
 | --- | --- |
 | Payment Tracker + Personal Budget | `data/payments.xlsx` - the Excel workbook *is* the database |
 | Reminders | `data/reminders.json`, `data/push-devices.json`, `data/vapid.json` |
-| ROSE Lingo | `data/lingo.db` - a SQLite database (EF Core), created and migrated on start |
 
 `data/` is git-ignored - your personal data never leaves your PC.
 
@@ -19,12 +18,11 @@ A clean, layered solution. Dependencies point inwards only.
 
 ```
 src/
-  Rose.Domain          pure rules: schedules, budget maths, reports, reminder repeats,
-                       spaced repetition, quizzes, romaji / hangul / pinyin readings (no I/O)
+  Rose.Domain          pure rules: schedules, budget maths, reports, reminder repeats (no I/O)
   Rose.Application     use cases (services) + interfaces for the outside world
-  Rose.Infrastructure  Excel (ClosedXML), JSON files, SQLite (EF Core), CSV/XLSX import,
-                       Web Push, desktop alarm, offline translator (NLLB-200 on ONNX Runtime)
-  Rose.Api             controllers, auth (JWT), Swagger, the reminder background worker
+  Rose.Infrastructure  Excel (ClosedXML), JSON files, CSV/XLSX import, Web Push, desktop alarm
+  Rose.Api             controllers, auth (JWT), Swagger, the reminder background worker,
+                       Desktop/ (ROSE.exe: serves the embedded React app)
 tests/
   Rose.UnitTests            domain + services + real temp workbooks
   Rose.Api.IntegrationTests the whole API in memory (WebApplicationFactory)
@@ -74,17 +72,15 @@ variables such as `Reminders__DesktopAlarms=false`):
 | `Reminders:TickInterval` | `00:00:15` | How often due reminders are checked |
 | `Shutdown:Enabled` | `false` | Let ROSE close the API (last tab closed, or the power button). The ROSE launcher sets it to `true` |
 | `Shutdown:IdleTimeout` | `00:00:20` | How long to wait after the last ROSE page disconnected |
-| `Lingo:ModelDirectory` | `models/nllb-200-distilled-600M` | The offline translation model (relative to `DataDirectory`) |
-| `Lingo:UnloadAfterIdle` | `00:02:00` | Free the model's memory (about 1 GB) after this long without a translation |
-| `Lingo:Threads` | `2` | CPU threads a translation may use (1-16). More is a little faster |
-| `Lingo:MaxTokens` | `256` | Longest translation of one sentence, in tokens |
+| `Desktop:OpenBrowser` | `true` | ROSE.exe only: open the browser on start |
 
 ### Auto-close
 
 With `Shutdown:Enabled`, every open ROSE page holds `GET /api/system/presence` (a Server-Sent
 Events stream). When the last stream has been gone for `IdleTimeout`, a background service
 (`ShutdownWatchdog`) stops the API. The ROSE launcher (`npm start` / `start-rose.bat`) then
-stops the UI too. `dotnet run` and Visual Studio leave it off, so the API keeps running.
+stops the UI too. ROSE.exe always turns it on. `dotnet run` and Visual Studio leave it off, so
+the API keeps running.
 
 ## Security
 
@@ -114,44 +110,23 @@ The port was also checked response-for-response against the original Flask and N
 | Auth | `POST /api/auth/login`, `GET /api/auth/session` |
 | Payment Tracker | `/api/payment-tracker/` `accounts`, `summary/{title}`, `payments`, `budget`, `report/summary`, `import/*`, `download`, `home-stats` |
 | Reminders | `/api/reminders/` `status`, `items`, `items/{id}/complete\|dismiss\|snooze`, `push/key\|subscribe\|unsubscribe\|test` |
-| ROSE Lingo | `/api/lingo/` `languages`, `kana`, `hangul`, `translator` (status), `translate`, `cards` (CRUD), `cards/due`, `cards/{id}/review`, `starter/{language}`, `quiz` (POST: random `count` or picked `card_ids`), `quiz/results` (GET history, POST score), `stats` |
 | System | `GET /api/system/info`, `GET /api/system/presence`, `POST /api/system/shutdown` |
 | Health | `GET /health` |
 
 Full, interactive documentation: Swagger.
 
-## ROSE Lingo
+## ROSE.exe (single-file package)
 
-- **Database:** EF Core + SQLite (`Rose.Infrastructure/Lingo`). `LingoDatabaseMigrator` applies
-  migrations on start, so `data/lingo.db` appears by itself. New migration:
+Publishing with `-p:RoseUiDist=<path to project-rose\dist>` switches `Rose.Api.csproj` to
+*package mode*: a self-contained, single-file, windowless `ROSE.exe` (win-x64) with the
+built React app embedded (`Microsoft.Extensions.FileProviders.Embedded`). In that mode
+`Desktop/DesktopApp.cs` and `Program.cs`:
 
-  ```powershell
-  dotnet tool restore
-  dotnet ef migrations add <Name> --project src/Rose.Infrastructure --startup-project src/Rose.Infrastructure `
-    --context LingoDbContext --output-dir Lingo/Migrations
-  ```
+- load `appsettings*.json` and `data\` from the exe's folder;
+- serve the UI on the same origin as the API, with an SPA fallback to `index.html`
+  (unknown `/api/*` still 404s);
+- allow one copy (a named mutex; a second start just opens a browser tab);
+- open the browser, enable auto-close, and write startup errors to `rose-error.log`.
 
-  The full walkthrough is in the UI repo's
-  [LEARNING.md, section 15](https://github.com/chupipings1424/project-rose/blob/main/LEARNING.md#15-rose-lingo-a-real-database-sqlite--ef-core).
-- **Languages:** Tagalog, English, Japanese, Korean, Chinese (Simplified and Traditional), German.
-- **Translation, fully offline:** `NllbTranslator` runs **NLLB-200 distilled 600M** (quantized
-  ONNX) with `Microsoft.ML.OnnxRuntime` and `Microsoft.ML.Tokenizers`. Nothing leaves the PC.
-  The model is not in git. Install it once per PC:
-
-  ```powershell
-  .\setup-lingo.cmd    # needs internet (Hugging Face); ~1 GB into data\models\nllb-200-distilled-600M
-  ```
-
-  It resumes broken downloads and skips files that already exist. For a PC without
-  internet, copy `data\models` from a PC that ran it, then restart the API. Without the model,
-  `GET /api/lingo/translator` reports `installed: false` and `translate` answers **503** with
-  these instructions; everything else works. The first translation loads the model (a few
-  seconds); it is unloaded again after `UnloadAfterIdle`. To keep memory low, ONNX Runtime
-  runs without its memory arena or memory patterns (freed memory goes back to Windows) and
-  with `Threads` CPU threads.
-- **Readings:** romaji, Revised Romanization of Korean and pinyin are rule-based
-  (`Rose.Domain/Lingo`); the pinyin table comes from *pypinyin* (MIT).
-- **Quizzes:** on demand only. `POST quiz` with `count` (5, 10 or 20 random cards) or `card_ids`
-  (your own pick); needs at least 4 cards in the deck. `POST quiz/results` saves the score;
-  wrong answers send the card back to review. **Spaced repetition:** `Rose.Domain/Lingo/Srs.cs` (SM-2).
-- **Licence:** the NLLB-200 model is **CC-BY-NC 4.0**, personal / non-commercial use only.
+Normal builds and the tests are unchanged. Build it from the UI repo with
+`package-rose.cmd` (`npm run package`), which also copies your token and data next to the exe.

@@ -3,5 +3,3 @@
 *.cmd text eol=crlf
 *.bat text eol=crlf
 *.xlsx binary
-*.onnx binary
-*.model binary
