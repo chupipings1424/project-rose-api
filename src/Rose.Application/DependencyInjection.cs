@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Rose.Application.Importing;
 using Rose.Application.Reminders;
+using Rose.Application.Savings;
 using Rose.Application.Tracker;
 
 namespace Rose.Application;
@@ -18,6 +19,8 @@ public static class DependencyInjection
         services.AddSingleton<ReminderService>();
         services.AddSingleton<PushService>();
         services.AddSingleton<ReminderRinger>();
+
+        services.AddSingleton<SavingsService>();
         return services;
     }
 }
