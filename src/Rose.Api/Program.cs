@@ -11,6 +11,7 @@ using Rose.Api.Desktop;
 using Rose.Api.Infrastructure;
 using Rose.Api.Lifetime;
 using Rose.Api.Reminders;
+using Rose.Api.Scheduling;
 using Rose.Application;
 using Rose.Application.Common;
 using Rose.Infrastructure;
@@ -98,7 +99,7 @@ builder.Services.AddControllers().AddJsonOptions(options =>
     options.JsonSerializerOptions.Converters.Add(new IsoDateTimeOffsetConverter());
 });
 builder.Services.AddHealthChecks();
-builder.Services.AddHostedService<ReminderWorker>();
+builder.Services.AddHostedService<SchedulerWorker>();
 
 // ---- lifetime: close ROSE when its last page closes (or the power button) --
 builder.Services.AddOptions<ShutdownOptions>()
@@ -115,7 +116,7 @@ builder.Services.AddSwaggerGen(options =>
     {
         Title = "Project ROSE API",
         Version = "v1",
-        Description = "Payment Tracker, Budget and Reminders for Project ROSE. Click **Authorize**, then call "
+        Description = "Payment Tracker, Budget, Reminders, Savings Goals and Habits for Project ROSE. Click **Authorize**, then call "
             + "`POST /api/auth/login` with your access token and paste the `access_token` it returns.",
     });
     options.IncludeXmlComments(Path.Combine(AppContext.BaseDirectory, $"{Assembly.GetExecutingAssembly().GetName().Name}.xml"));

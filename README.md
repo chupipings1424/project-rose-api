@@ -1,7 +1,8 @@
 # Project ROSE API
 
 The backend for [Project ROSE](https://github.com/chupipings1424/project-rose): a .NET 9 ASP.NET Core
-Web API with Swagger, serving the **Payment Tracker**, **Personal Budget** and **Reminders** projects.
+Web API with Swagger, serving the **Payment Tracker**, **Personal Budget**, **Reminders**, **Savings Goals** and
+**Habit Tracker** projects.
 
 ROSE (the React app) is only the UI. This API owns the data:
 
@@ -9,6 +10,8 @@ ROSE (the React app) is only the UI. This API owns the data:
 | --- | --- |
 | Payment Tracker + Personal Budget | `data/payments.xlsx` - the Excel workbook *is* the database |
 | Reminders | `data/reminders.json`, `data/push-devices.json`, `data/vapid.json` |
+| Savings Goals | `data/goals.json` |
+| Habit Tracker | `data/habits.json` |
 
 `data/` is git-ignored - your personal data never leaves your PC.
 
@@ -18,10 +21,12 @@ A clean, layered solution. Dependencies point inwards only.
 
 ```
 src/
-  Rose.Domain          pure rules: schedules, budget maths, reports, reminder repeats (no I/O)
+  Rose.Domain          pure rules: schedules, budget maths, reports, reminder repeats,
+                       savings pace/status, habit streaks and nudge timing (no I/O)
   Rose.Application     use cases (services) + interfaces for the outside world
   Rose.Infrastructure  Excel (ClosedXML), JSON files, CSV/XLSX import, Web Push, desktop alarm
-  Rose.Api             controllers, auth (JWT), Swagger, the reminder background worker,
+  Rose.Api             controllers, auth (JWT), Swagger, the background scheduler
+                       (SchedulerWorker runs every IScheduledJob: reminders, habit nudges),
                        Desktop/ (ROSE.exe: serves the embedded React app)
 tests/
   Rose.UnitTests            domain + services + real temp workbooks
@@ -40,7 +45,7 @@ Prerequisite: the [.NET 9 SDK](https://dotnet.microsoft.com/download/dotnet/9.0)
      dotnet user-secrets --project src/Rose.Api set "Auth:AccessToken" "your-token"
      ```
 2. **Put your data in `data/`** (optional - an empty workbook is created on first use):
-   `payments.xlsx`, `reminders.json`, `push-devices.json`, `vapid.json`.
+   `payments.xlsx`, `reminders.json`, `push-devices.json`, `vapid.json`, `goals.json`, `habits.json`.
 3. **Start it:**
    ```powershell
    dotnet run --project src/Rose.Api
@@ -67,9 +72,9 @@ variables such as `Reminders__DesktopAlarms=false`):
 | `Rose:WorkbookPath` | `<DataDirectory>/payments.xlsx` | Use a workbook somewhere else |
 | `Auth:AccessToken` | *(required)* | The login token |
 | `Auth:SessionLifetime` | `12:00:00` | How long a login lasts |
-| `Reminders:SchedulerEnabled` | `true` | Ring reminders in the background |
-| `Reminders:DesktopAlarms` | `true` | Always-on-top popup on this PC |
-| `Reminders:TickInterval` | `00:00:15` | How often due reminders are checked |
+| `Reminders:SchedulerEnabled` | `true` | Ring reminders and send habit nudges in the background |
+| `Reminders:DesktopAlarms` | `true` | Always-on-top popup on this PC (reminders and habit nudges) |
+| `Reminders:TickInterval` | `00:00:15` | How often due reminders and habit nudges are checked |
 | `Shutdown:Enabled` | `false` | Let ROSE close the API (last tab closed, or the power button). The ROSE launcher sets it to `true` |
 | `Shutdown:IdleTimeout` | `00:00:20` | How long to wait after the last ROSE page disconnected |
 | `Desktop:OpenBrowser` | `true` | ROSE.exe only: open the browser on start |
@@ -110,6 +115,8 @@ The port was also checked response-for-response against the original Flask and N
 | Auth | `POST /api/auth/login`, `GET /api/auth/session` |
 | Payment Tracker | `/api/payment-tracker/` `accounts`, `summary/{title}`, `payments`, `budget`, `report/summary`, `import/*`, `download`, `home-stats` |
 | Reminders | `/api/reminders/` `status`, `items`, `items/{id}/complete\|dismiss\|snooze`, `push/key\|subscribe\|unsubscribe\|test` |
+| Savings Goals | `/api/savings/` `goals`, `goals/{id}`, `goals/{id}/entries`, `goals/{id}/entries/{entryId}` |
+| Habit Tracker | `/api/habits/` `items`, `items/{id}`, `PUT items/{id}/days/{yyyy-MM-dd}`, `items/{id}/nudge/complete\|dismiss\|snooze` |
 | System | `GET /api/system/info`, `GET /api/system/presence`, `POST /api/system/shutdown` |
 | Health | `GET /health` |
 

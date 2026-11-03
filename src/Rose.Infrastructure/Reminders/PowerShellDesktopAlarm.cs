@@ -4,7 +4,6 @@ using System.Text;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Rose.Application.Abstractions;
-using Rose.Domain.Reminders;
 
 namespace Rose.Infrastructure.Reminders;
 
@@ -38,9 +37,9 @@ public sealed partial class PowerShellDesktopAlarm(
 
     public bool Enabled => OperatingSystem.IsWindows() && options.Value.DesktopAlarms;
 
-    public void Show(Reminder reminder, string dueLabel)
+    public void Show(DesktopAlarmRequest request)
     {
-        if (!Enabled || open.ContainsKey(reminder.Id)) return;
+        if (!Enabled || open.ContainsKey(request.Key)) return;
 
         var start = new ProcessStartInfo("powershell.exe")
         {
@@ -49,9 +48,10 @@ public sealed partial class PowerShellDesktopAlarm(
         };
         foreach (var argument in new[] { "-NoProfile", "-NonInteractive", "-STA", "-WindowStyle", "Hidden", "-EncodedCommand", EncodedScript.Value })
             start.ArgumentList.Add(argument);
-        start.Environment["ALARM_TITLE"] = reminder.Text;
-        start.Environment["ALARM_DUE"] = dueLabel;
-        start.Environment["ALARM_TASKID"] = reminder.Id;
+        start.Environment["ALARM_TITLE"] = request.Title;
+        start.Environment["ALARM_DUE"] = request.Subtitle;
+        start.Environment["ALARM_HEADER"] = request.Header;
+        start.Environment["ALARM_CALLBACK"] = request.CallbackPath;
         start.Environment["ALARM_BASEURL"] = callback.BaseUrl ?? "";
         start.Environment["ALARM_TOKEN"] = callback.CreateToken();
 
@@ -60,16 +60,16 @@ public sealed partial class PowerShellDesktopAlarm(
             var process = new Process { StartInfo = start, EnableRaisingEvents = true };
             process.Exited += (_, _) =>
             {
-                if (open.TryRemove(reminder.Id, out var done)) done.Dispose();
+                if (open.TryRemove(request.Key, out var done)) done.Dispose();
             };
-            open[reminder.Id] = process;
+            open[request.Key] = process;
             process.Start();
         }
 #pragma warning disable CA1031 // a missing popup must never stop the phones from ringing
         catch (Exception error)
 #pragma warning restore CA1031
         {
-            if (open.TryRemove(reminder.Id, out var failed)) failed.Dispose();
+            if (open.TryRemove(request.Key, out var failed)) failed.Dispose();
             LogPopupFailed(error.Message);
         }
     }

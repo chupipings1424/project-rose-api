@@ -5,6 +5,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Rose.Application.Abstractions;
 using Rose.Application.Reminders;
+using Rose.Domain.Habits;
 using Rose.Domain.Reminders;
 using Rose.Domain.Savings;
 using Rose.Infrastructure.Excel;
@@ -46,6 +47,8 @@ public static class DependencyInjection
             new JsonDataFile<List<PushDevice>>(DataFile(sp, "push-devices.json"), () => []));
         services.AddSingleton<IDataFile<List<SavingsGoal>>>(sp =>
             new JsonDataFile<List<SavingsGoal>>(DataFile(sp, "goals.json"), () => []));
+        services.AddSingleton<IDataFile<List<Habit>>>(sp =>
+            new JsonDataFile<List<Habit>>(DataFile(sp, "habits.json"), () => []));
         services.AddSingleton(sp =>
             VapidKeys.LoadOrCreate(new JsonDataFile<VapidKeys?>(DataFile(sp, "vapid.json"), () => null)));
         services.AddSingleton<IPushSender, WebPushSender>();

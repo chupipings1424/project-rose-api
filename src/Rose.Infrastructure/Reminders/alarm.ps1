@@ -1,15 +1,18 @@
-﻿param()
+param()
 
-# Native always-on-top alarm popup. Launched by PowerShellDesktopAlarm when a reminder rings.
+# Native always-on-top alarm popup. Launched by PowerShellDesktopAlarm when a reminder rings
+# or a habit nudges. ALARM_CALLBACK is the API path the buttons report back to.
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
 $taskTitle = $env:ALARM_TITLE
 $taskDue   = $env:ALARM_DUE
-$taskId    = $env:ALARM_TASKID
+$callback  = $env:ALARM_CALLBACK
+$headerText = $env:ALARM_HEADER
 $baseUrl   = $env:ALARM_BASEURL
 $token     = $env:ALARM_TOKEN
 if ([string]::IsNullOrWhiteSpace($taskTitle)) { $taskTitle = "Task" }
+if ([string]::IsNullOrWhiteSpace($headerText)) { $headerText = "TIME'S UP" }
 
 # Win32 helpers so the window really comes to the front, even over full-screen apps.
 Add-Type @"
@@ -55,7 +58,7 @@ $form.BackColor = [System.Drawing.Color]::FromArgb(127, 29, 29)
 $form.ForeColor = [System.Drawing.Color]::White
 
 $header = New-Object System.Windows.Forms.Label
-$header.Text = "TIME'S UP"
+$header.Text = $headerText
 $header.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
 $header.ForeColor = [System.Drawing.Color]::FromArgb(254, 202, 202)
 $header.TextAlign = 'MiddleCenter'
@@ -135,11 +138,11 @@ $form.Add_FormClosing({ $timer.Stop() })
 $form.Dispose()
 
 # Report the choice back to the server.
-if ($baseUrl) {
+if ($baseUrl -and $callback) {
   $action = if ($result.action -eq "done") { "complete" } else { $result.action }
   $body = @{ minutes = $result.minutes } | ConvertTo-Json -Compress
   try {
     $headers = @{ Authorization = "Bearer $token" }
-    Invoke-RestMethod -Uri "$($baseUrl.TrimEnd('/'))/api/reminders/items/$taskId/$action" -Method Post -Headers $headers -ContentType "application/json" -Body $body -TimeoutSec 5 | Out-Null
+    Invoke-RestMethod -Uri "$($baseUrl.TrimEnd('/'))$callback/$action" -Method Post -Headers $headers -ContentType "application/json" -Body $body -TimeoutSec 5 | Out-Null
   } catch { }
 }
