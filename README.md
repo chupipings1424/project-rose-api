@@ -185,6 +185,11 @@ Sign in once as the admin after deploying (that claims your existing data), then
 on first sign-in. Push notifications only go to devices where *Enable notifications* was
 turned on.
 
+**Another admin:** first add them on **Users** as a normal account (that creates their login),
+then add their email on Render as the next `Access__AdminEmails__N` (`__1`, `__2`, ...) and
+save. After the redeploy they see **Users** too. Admins keep their own data and can't be reset
+or removed on the page; take them out of the list first.
+
 ### 3. cron-job.org (stay awake)
 
 Render's free plan sleeps after 15 idle minutes, which would stop reminders; Supabase pauses
