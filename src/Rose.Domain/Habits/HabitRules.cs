@@ -175,7 +175,7 @@ public static class HabitRules
             : null;
     }
 
-    /// <summary>Should this habit nudge you right now? <paramref name="localNow"/> is this PC's local time.</summary>
+    /// <summary>Should this habit nudge you right now? <paramref name="localNow"/> is the server's local time.</summary>
     public static bool ShouldNudge(Habit habit, DateTimeOffset localNow)
     {
         if (habit.RemindAt is not { } remindAt) return false;

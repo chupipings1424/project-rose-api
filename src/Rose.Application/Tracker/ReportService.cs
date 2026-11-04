@@ -9,6 +9,6 @@ public sealed class ReportService(ITrackerWorkbookStore store, TimeProvider cloc
     {
         using var book = await store.OpenAsync(ct);
         return ReportBuilder.Build(
-            book.Accounts(), book.Payments(), book.BudgetLines(), year, clock.GetLocalNow().DateTime, store.WorkbookPath);
+            book.Accounts(), book.Payments(), book.BudgetLines(), year, clock.GetLocalNow().DateTime, store.StorageName);
     }
 }

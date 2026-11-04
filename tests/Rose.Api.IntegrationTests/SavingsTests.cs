@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 
 namespace Rose.Api.IntegrationTests;
 
@@ -36,14 +37,17 @@ public sealed class SavingsTests(RoseApiFactory factory) : IClassFixture<RoseApi
     }
 
     [Fact]
-    public async Task Goals_are_saved_to_goals_json()
+    public async Task Goals_are_saved_to_the_database()
     {
         var client = await factory.CreateAuthenticatedClientAsync();
+        var id = (await (await client.PostAsJsonAsync(Url("goals"), new { name = "Emergency fund", target = 1000 })).JsonAsync()).GetProperty("id").GetString();
+        await client.PostAsJsonAsync(Url($"goals/{id}/entries"), new { kind = "deposit", amount = 250.5 });
 
-        await client.PostAsJsonAsync(Url("goals"), new { name = "Emergency fund", target = 1000 });
-
-        var saved = await File.ReadAllTextAsync(Path.Combine(factory.DataDirectory, "goals.json"));
-        Assert.Contains("Emergency fund", saved, StringComparison.Ordinal);
+        await using var db = factory.Database();
+        var saved = await db.SavingsGoals.Include(g => g.Entries).SingleAsync(g => g.Id == id);
+        Assert.Equal("Emergency fund", saved.Name);
+        Assert.Equal(1000m, saved.Target);
+        Assert.Equal(250.5m, Assert.Single(saved.Entries).Amount);
     }
 
     [Fact]

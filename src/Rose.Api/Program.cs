@@ -1,92 +1,29 @@
 using System.Reflection;
 using System.Text.Json;
-using System.Threading.RateLimiting;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.IdentityModel.Tokens;
+using Microsoft.AspNetCore.StaticFiles;
+using Microsoft.Extensions.Configuration.Json;
+using Microsoft.Net.Http.Headers;
 using Microsoft.OpenApi.Models;
 using Rose.Api.Auth;
-using Rose.Api.Desktop;
 using Rose.Api.Infrastructure;
-using Rose.Api.Lifetime;
-using Rose.Api.Reminders;
 using Rose.Api.Scheduling;
 using Rose.Application;
 using Rose.Application.Common;
 using Rose.Infrastructure;
-using Rose.Infrastructure.Reminders;
+using Rose.Infrastructure.Persistence;
 
-// ROSE.exe (the packaged build) reads appsettings*.json and data\ next to itself,
-// wherever it is started from. Normal builds keep the default (the working folder).
-var builder = WebApplication.CreateBuilder(new WebApplicationOptions
-{
-    Args = args,
-    ContentRootPath = DesktopApp.HasEmbeddedUi ? AppContext.BaseDirectory : null,
-});
+var builder = WebApplication.CreateBuilder(args);
 
-// Your secrets (Auth:AccessToken) live here, never in git.
-builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
-
-using var desktop = DesktopApp.HasEmbeddedUi ? new DesktopApp(builder.Configuration) : null;
-if (desktop is { AlreadyRunning: true })
-{
-    desktop.OpenBrowser();
-    return;
-}
-if (desktop is not null)
-{
-    // ROSE.exe always closes itself with its last tab (or the power button).
-    builder.Configuration.AddInMemoryCollection([new("Shutdown:Enabled", "true")]);
-}
+// Local secrets (Supabase settings, connection string) live here, never in git. It goes right
+// after the other JSON files, so environment variables (Render) and test settings still win.
+var sources = builder.Configuration.Sources;
+sources.Insert(
+    sources.ToList().FindLastIndex(source => source is JsonConfigurationSource) + 1,
+    new JsonConfigurationSource { Path = "appsettings.Local.json", Optional = true, ReloadOnChange = true });
 
 builder.Services.AddRoseApplication();
 builder.Services.AddRoseInfrastructure(builder.Configuration);
-
-// ---- auth: access token -> signed session token (JWT) --------------------
-builder.Services.AddOptions<AuthOptions>()
-    .Bind(builder.Configuration.GetSection(AuthOptions.Section))
-    .ValidateDataAnnotations()
-    .ValidateOnStart();
-builder.Services.AddSingleton<TokenService>();
-builder.Services.AddSingleton<IAlarmCallback, AlarmCallback>();
-
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer();
-builder.Services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
-    .Configure<TokenService>((options, tokens) =>
-    {
-        options.MapInboundClaims = false;
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidIssuer = AuthOptions.Issuer,
-            ValidAudience = AuthOptions.Audience,
-            IssuerSigningKey = tokens.SigningKey,
-            ClockSkew = TimeSpan.FromMinutes(1),
-        };
-    });
-builder.Services.AddAuthorizationBuilder()
-    .SetFallbackPolicy(new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build());
-
-builder.Services.AddRateLimiter(options =>
-{
-    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-    options.AddPolicy(AuthController.LoginRateLimit, context => RateLimitPartition.GetFixedWindowLimiter(
-        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-        _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
-    options.OnRejected = async (context, ct) =>
-    {
-        var problems = context.HttpContext.RequestServices.GetRequiredService<IProblemDetailsService>();
-        await problems.WriteAsync(new ProblemDetailsContext
-        {
-            HttpContext = context.HttpContext,
-            ProblemDetails = new ProblemDetails
-            {
-                Status = StatusCodes.Status429TooManyRequests,
-                Detail = "Too many attempts - wait a minute and try again.",
-            },
-        });
-    };
-});
+builder.Services.AddSupabaseAuth(builder.Configuration);
 
 // ---- HTTP ------------------------------------------------------------------
 builder.Services.AddProblemDetails();
@@ -98,16 +35,8 @@ builder.Services.AddControllers().AddJsonOptions(options =>
     options.JsonSerializerOptions.Converters.Add(new LenientStringConverter());
     options.JsonSerializerOptions.Converters.Add(new IsoDateTimeOffsetConverter());
 });
-builder.Services.AddHealthChecks();
 builder.Services.AddHostedService<SchedulerWorker>();
 
-// ---- lifetime: close ROSE when its last page closes (or the power button) --
-builder.Services.AddOptions<ShutdownOptions>()
-    .Bind(builder.Configuration.GetSection(ShutdownOptions.Section))
-    .ValidateDataAnnotations()
-    .ValidateOnStart();
-builder.Services.AddSingleton<PresenceTracker>();
-builder.Services.AddHostedService<ShutdownWatchdog>();
 // ---- Swagger -------------------------------------------------------------
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
@@ -116,8 +45,8 @@ builder.Services.AddSwaggerGen(options =>
     {
         Title = "Project ROSE API",
         Version = "v1",
-        Description = "Payment Tracker, Budget, Reminders, Savings Goals and Habits for Project ROSE. Click **Authorize**, then call "
-            + "`POST /api/auth/login` with your access token and paste the `access_token` it returns.",
+        Description = "Payment Tracker, Budget, Reminders, Savings Goals and Habits for Project ROSE. Sign in to the React app, "
+            + "copy the Supabase access token (DevTools > Application > Local Storage), click **Authorize** and paste it.",
     });
     options.IncludeXmlComments(Path.Combine(AppContext.BaseDirectory, $"{Assembly.GetExecutingAssembly().GetName().Name}.xml"));
     options.SupportNonNullableReferenceTypes();
@@ -129,7 +58,7 @@ builder.Services.AddSwaggerGen(options =>
         Type = SecuritySchemeType.Http,
         Scheme = "bearer",
         BearerFormat = "JWT",
-        Description = "The access_token from POST /api/auth/login.",
+        Description = "A Supabase access token for an allowed email.",
         Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" },
     };
     options.AddSecurityDefinition("Bearer", bearer);
@@ -138,8 +67,19 @@ builder.Services.AddSwaggerGen(options =>
 
 var app = builder.Build();
 
+// Create / upgrade the tables before anything can touch them.
+await RoseDatabase.InitializeAsync(app.Services);
+
 app.UseExceptionHandler();
 app.UseStatusCodePages();
+app.Use(async (context, next) =>
+{
+    var headers = context.Response.Headers;
+    headers[HeaderNames.XContentTypeOptions] = "nosniff";
+    headers[HeaderNames.XFrameOptions] = "DENY";
+    headers["Referrer-Policy"] = "no-referrer";
+    await next();
+});
 
 if (app.Environment.IsDevelopment())
 {
@@ -151,25 +91,37 @@ if (app.Environment.IsDevelopment())
     });
 }
 
-// ROSE.exe serves the React app itself; everything else proxies /api through Vite.
-var ui = desktop is null ? null : new StaticFileOptions { FileProvider = DesktopApp.UiFiles() };
-if (ui is not null)
+// In the container the built React app sits in wwwroot and this server hosts it.
+// Locally Vite serves the UI and proxies /api here, so there is no wwwroot.
+var hasUi = app.Environment.WebRootPath is { } webRoot && File.Exists(Path.Combine(webRoot, "index.html"));
+if (hasUi)
 {
-    app.UseDefaultFiles(new DefaultFilesOptions { FileProvider = ui.FileProvider }); // "/" -> /index.html
-    app.UseStaticFiles(ui);
+    app.UseDefaultFiles(); // "/" -> /index.html
+    app.UseStaticFiles(new StaticFileOptions
+    {
+        // Vite fingerprints everything in /assets, so those can be cached forever; the rest
+        // (index.html, the service worker, the manifest) must always be revalidated.
+        OnPrepareResponse = context => context.Context.Response.Headers.CacheControl =
+            context.Context.Request.Path.StartsWithSegments("/assets", StringComparison.Ordinal)
+                ? "public, max-age=31536000, immutable"
+                : "no-cache",
+        ContentTypeProvider = new FileExtensionContentTypeProvider { Mappings = { [".webmanifest"] = "application/manifest+json" } },
+    });
 }
 
 app.UseAuthentication();
 app.UseAuthorization();
-app.UseRateLimiter();
 
 app.MapHealthChecks("/health").AllowAnonymous();
 app.MapControllers();
-if (ui is not null)
+if (hasUi)
 {
     // Client-side routes (/projects/budget...) all load index.html; React Router takes it from there.
     // Unknown /api/* addresses still get a real 404 instead of a web page.
-    app.MapFallbackToFile("{*path:nonfile:regex(^(?!api/).*$)}", "index.html", ui)
+    app.MapFallbackToFile("{*path:nonfile:regex(^(?!api/).*$)}", "index.html", new StaticFileOptions
+    {
+        OnPrepareResponse = context => context.Context.Response.Headers.CacheControl = "no-cache",
+    })
         .AllowAnonymous()
         .ExcludeFromDescription();
 }
@@ -180,8 +132,7 @@ else
         .ExcludeFromDescription();
 }
 
-if (desktop is null) await app.RunAsync();
-else await desktop.RunAsync(app);
+await app.RunAsync();
 
 /// <summary>Exposed for WebApplicationFactory in the integration tests.</summary>
 public partial class Program;

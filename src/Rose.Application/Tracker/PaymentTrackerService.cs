@@ -32,7 +32,7 @@ public sealed class PaymentTrackerService(ITrackerWorkbookStore store, TimeProvi
 
         var budget = BudgetView.Build(today.Year, book.BudgetLines(), today.Year);
         return new HomeStats(
-            store.WorkbookPath,
+            store.StorageName,
             new HomePayments(accounts.Count, Coerce.Round(total), paidCount, paymentCount, nextDue),
             new HomeBudget(budget.Year, budget.TotalRevenue, budget.TotalExpenses, budget.Net, budget.LineCount));
     }
@@ -73,7 +73,7 @@ public sealed class PaymentTrackerService(ITrackerWorkbookStore store, TimeProvi
                     plan.Dates[i], $"Instalment {i + 1} of {plan.Instalments}"));
             }
         }
-        book.Save();
+        await book.SaveAsync(ct);
         return book.Accounts();
     }
 
@@ -131,7 +131,7 @@ public sealed class PaymentTrackerService(ITrackerWorkbookStore store, TimeProvi
             };
             book.UpdatePayment(payment);
         }
-        book.Save();
+        await book.SaveAsync(ct);
         return new PaymentCreated(
             payment.Id, instalment is not null, AccountSummary.For(title, book.Accounts(), book.Payments(), clock.Today()));
     }
@@ -148,7 +148,7 @@ public sealed class PaymentTrackerService(ITrackerWorkbookStore store, TimeProvi
             throw new ValidationException("status must be one of ['Paid', 'Unpaid']");
         using var book = await store.OpenAsync(ct);
         if (!book.SetPaymentStatus(id, request.Status!)) throw new NotFoundException("Payment not found.");
-        book.Save();
+        await book.SaveAsync(ct);
         return new PaymentUpdated(true, AccountSummary.For(request.Title ?? "", book.Accounts(), book.Payments(), clock.Today()));
     }
 
@@ -156,7 +156,7 @@ public sealed class PaymentTrackerService(ITrackerWorkbookStore store, TimeProvi
     {
         using var book = await store.OpenAsync(ct);
         if (!book.DeletePayment(id)) throw new NotFoundException("Payment not found.");
-        book.Save();
+        await book.SaveAsync(ct);
     }
 
     /// <summary>Deletes a title and every payment recorded under it, in one save.</summary>
@@ -164,7 +164,7 @@ public sealed class PaymentTrackerService(ITrackerWorkbookStore store, TimeProvi
     {
         using var book = await store.OpenAsync(ct);
         var removed = book.DeleteAccount(title) ?? throw new NotFoundException("Title not found.");
-        book.Save();
+        await book.SaveAsync(ct);
         return new AccountDeleted(true, removed, book.Accounts());
     }
 

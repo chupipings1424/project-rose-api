@@ -1,0 +1,53 @@
+# Weekly encrypted backup of the ROSE database.
+#
+# This file belongs in a PRIVATE repo (e.g. rose-backups) at .github/workflows/rose-backup.yml,
+# not in project-rose-api. It commits to its own repo, so no personal access token is needed.
+# Repo secrets (Settings > Secrets and variables > Actions):
+#   ROSE_DB_URL         Supabase session pooler URI, e.g.
+#                       postgresql://postgres.<ref>:<password>@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres?sslmode=require
+#   BACKUP_PASSPHRASE   a long random passphrase - keep a copy in your password manager
+# Restore: gpg -d rose-YYYY-MM-DD.sql.gz.gpg | gunzip | psql "<database url>"
+name: ROSE backup
+
+on:
+  schedule:
+    - cron: "0 18 * * 6" # Sundays 02:00 Manila time
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency: backup
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Dump, compress and encrypt
+        env:
+          ROSE_DB_URL: ${{ secrets.ROSE_DB_URL }}
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          mkdir -p backups
+          file="backups/rose-$(date -u +%F).sql.gz.gpg"
+          # pg_dump from a container, so its version always matches Supabase (PostgreSQL 17).
+          docker run --rm -e ROSE_DB_URL postgres:17-alpine \
+            sh -c 'pg_dump "$ROSE_DB_URL" --schema=rose --no-owner --no-privileges' \
+            | gzip -9 \
+            | gpg --batch --yes --pinentry-mode loopback --symmetric --cipher-algo AES256 \
+                  --passphrase-fd 3 --output "$file" 3<<<"$BACKUP_PASSPHRASE"
+          test -s "$file"
+          # Keep the 12 newest (about three months); older ones stay in git history.
+          ls -1 backups/rose-*.gpg | sort -r | tail -n +13 | xargs -r git rm -q --
+          echo "Backed up to $file ($(stat -c %s "$file") bytes)"
+
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backups
+          git diff --cached --quiet || git commit -m "Backup $(date -u +%F)"
+          git push

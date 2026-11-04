@@ -1,21 +1,37 @@
 using System.Security.Cryptography;
 using Microsoft.AspNetCore.WebUtilities;
-using Rose.Application.Abstractions;
+using Microsoft.EntityFrameworkCore;
+using Rose.Infrastructure.Persistence;
 
 namespace Rose.Infrastructure.Reminders;
 
 /// <summary>
-/// VAPID keys identify this server to Apple's / Google's push services. They are created once
-/// and saved next to the data (git-ignored). Losing them only means every phone has to tap
-/// "Enable notifications" again.
+/// VAPID keys identify this server to Apple's / Google's push services. They come from
+/// configuration (Push:VapidPublicKey / Push:VapidPrivateKey) or are created once and kept in
+/// the database. Losing them only means every phone has to tap "Enable notifications" again.
 /// </summary>
 public sealed record VapidKeys(string PublicKey, string PrivateKey)
 {
-    public static VapidKeys LoadOrCreate(IDataFile<VapidKeys?> file)
+    private const string PublicKeyName = "vapid_public_key";
+    private const string PrivateKeyName = "vapid_private_key";
+
+    internal static VapidKeys Resolve(PushOptions options, IDbContextFactory<RoseDbContext> contexts)
     {
-        if (file.Read() is { PublicKey.Length: > 0, PrivateKey.Length: > 0 } existing) return existing;
+        if (options is { VapidPublicKey.Length: > 0, VapidPrivateKey.Length: > 0 })
+            return new VapidKeys(options.VapidPublicKey, options.VapidPrivateKey);
+
+        using var db = contexts.CreateDbContext();
+        var saved = db.AppSecrets
+            .Where(s => s.Key == PublicKeyName || s.Key == PrivateKeyName)
+            .ToDictionary(s => s.Key, s => s.Value);
+        if (saved.TryGetValue(PublicKeyName, out var publicKey) && saved.TryGetValue(PrivateKeyName, out var privateKey))
+            return new VapidKeys(publicKey, privateKey);
+
         var keys = Generate();
-        file.Write(keys);
+        db.AppSecrets.RemoveRange(db.AppSecrets.Where(s => s.Key == PublicKeyName || s.Key == PrivateKeyName));
+        db.AppSecrets.Add(new AppSecretRow { Key = PublicKeyName, Value = keys.PublicKey });
+        db.AppSecrets.Add(new AppSecretRow { Key = PrivateKeyName, Value = keys.PrivateKey });
+        db.SaveChanges();
         return keys;
     }
 

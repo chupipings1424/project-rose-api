@@ -7,56 +7,41 @@ using Rose.Domain.Common;
 namespace Rose.Application.Reminders;
 
 /// <summary>Remembers which devices subscribed and sends them Web Push messages.</summary>
-public sealed partial class PushService
+public sealed partial class PushService(
+    IRepository<PushDevice> repository, IPushSender sender, TimeProvider clock, ILogger<PushService> logger) : IDisposable
 {
     public const string RemindersUrl = "/projects/reminders";
 
-    private readonly IDataFile<List<PushDevice>> file;
-    private readonly IPushSender sender;
-    private readonly TimeProvider clock;
-    private readonly ILogger<PushService> logger;
-    private readonly Lock gate = new();
-    private List<PushDevice> devices;
-
-    public PushService(IDataFile<List<PushDevice>> file, IPushSender sender, TimeProvider clock, ILogger<PushService> logger)
-    {
-        this.file = file;
-        this.sender = sender;
-        this.clock = clock;
-        this.logger = logger;
-        devices = file.Read();
-    }
+    private readonly RepositoryCache<PushDevice> cache = new(repository);
 
     public string PublicKey => sender.PublicKey;
 
-    public int Count
+    public async Task<int> CountAsync(CancellationToken ct = default)
     {
-        get { lock (gate) return devices.Count; }
+        using var session = await cache.OpenAsync(ct);
+        return session.Items.Count;
     }
 
-    public int Subscribe(PushSubscribeRequest request)
+    public async Task<int> SubscribeAsync(PushSubscribeRequest request, CancellationToken ct = default)
     {
         if (request.Subscription is not { IsValid: true } subscription)
             throw new ValidationException("Invalid push subscription.");
         var label = request.Label ?? "Unknown device";
-        lock (gate)
-        {
-            devices.RemoveAll(d => d.Subscription.Endpoint == subscription.Endpoint);
-            devices.Add(new PushDevice(subscription, label[..Math.Min(label.Length, 120)], clock.GetUtcNow()));
-            file.Write(devices);
-            return devices.Count;
-        }
+        var device = new PushDevice(subscription, label[..Math.Min(label.Length, 120)], clock.GetUtcNow());
+        using var session = await cache.OpenAsync(ct);
+        await session.SaveAsync(device, ct);
+        session.Items.RemoveAll(d => d.Subscription.Endpoint == subscription.Endpoint);
+        session.Items.Add(device);
+        return session.Items.Count;
     }
 
-    public int Unsubscribe(PushUnsubscribeRequest request)
+    public async Task<int> UnsubscribeAsync(PushUnsubscribeRequest request, CancellationToken ct = default)
     {
         if (request.Endpoint is null) throw new ValidationException("Missing endpoint.");
-        lock (gate)
-        {
-            devices.RemoveAll(d => d.Subscription.Endpoint == request.Endpoint);
-            file.Write(devices);
-            return devices.Count;
-        }
+        using var session = await cache.OpenAsync(ct);
+        await session.DeleteAsync(request.Endpoint, ct);
+        session.Items.RemoveAll(d => d.Subscription.Endpoint == request.Endpoint);
+        return session.Items.Count;
     }
 
     /// <summary>Sends to every device. Devices the push service says are gone (404/410) are forgotten.</summary>
@@ -64,7 +49,7 @@ public sealed partial class PushService
     {
         var payload = JsonSerializer.Serialize(message, RoseJson.Push);
         List<PushDevice> targets;
-        lock (gate) targets = [.. devices];
+        using (var session = await cache.OpenAsync(ct)) targets = [.. session.Items];
 
         var results = await Task.WhenAll(targets.Select(async Task<Delivery> (device) =>
         {
@@ -86,14 +71,12 @@ public sealed partial class PushService
             }
         }));
 
-        var gone = results.Where(r => r.Gone is not null).Select(r => r.Gone).ToHashSet();
+        var gone = results.Where(r => r.Gone is not null).Select(r => r.Gone!).ToHashSet();
         if (gone.Count > 0)
         {
-            lock (gate)
-            {
-                devices.RemoveAll(d => gone.Contains(d.Subscription.Endpoint));
-                file.Write(devices);
-            }
+            using var session = await cache.OpenAsync(ct);
+            foreach (var endpoint in gone) await session.DeleteAsync(endpoint, ct);
+            session.Items.RemoveAll(d => gone.Contains(d.Subscription.Endpoint!));
         }
         var sent = results.Count(r => r.Sent);
         return new PushResult(sent, results.Length - sent);
@@ -106,12 +89,14 @@ public sealed partial class PushService
             ct);
         if (result.Sent == 0)
         {
-            throw new ConflictException(Count > 0
+            throw new ConflictException(await CountAsync(ct) > 0
                 ? "Every device refused the test - enable notifications again."
                 : "No device has notifications enabled yet.");
         }
         return result;
     }
+
+    public void Dispose() => cache.Dispose();
 
     private readonly record struct Delivery(bool Sent, string? Gone);
 

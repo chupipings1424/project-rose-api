@@ -30,7 +30,7 @@ public sealed class BudgetService(ITrackerWorkbookStore store, TimeProvider cloc
 
         var line = new BudgetLine(PaymentTrackerService.NewId(), year, section, group, item, amounts, Coerce.Round(amounts.Sum()), request.Notes ?? "");
         book.AddBudgetLine(line);
-        book.Save();
+        await book.SaveAsync(ct);
         return new BudgetLineCreated(line.Id, View(book, request.Year));
     }
 
@@ -59,7 +59,7 @@ public sealed class BudgetService(ITrackerWorkbookStore store, TimeProvider cloc
             }
         }
         if (!found) throw new NotFoundException("Budget line not found.");
-        book.Save();
+        await book.SaveAsync(ct);
         return new BudgetChanged(true, View(book, request.Year));
     }
 
@@ -67,7 +67,7 @@ public sealed class BudgetService(ITrackerWorkbookStore store, TimeProvider cloc
     {
         using var book = await store.OpenAsync(ct);
         if (!book.DeleteBudgetLine(id)) throw new NotFoundException("Budget line not found.");
-        book.Save();
+        await book.SaveAsync(ct);
         return new BudgetChanged(true, View(book, year));
     }
 
@@ -78,7 +78,7 @@ public sealed class BudgetService(ITrackerWorkbookStore store, TimeProvider cloc
         using var book = await store.OpenAsync(ct);
         var removed = book.DeleteBudgetYear(year);
         if (removed == 0) throw new NotFoundException($"No budget lines found for {year}.");
-        book.Save();
+        await book.SaveAsync(ct);
         return new BudgetYearDeleted(true, removed, View(book, null));
     }
 
@@ -108,7 +108,7 @@ public sealed class BudgetService(ITrackerWorkbookStore store, TimeProvider cloc
             });
             copied++;
         }
-        book.Save();
+        await book.SaveAsync(ct);
         return new BudgetYearCopied(copied, View(book, request.To));
     }
 

@@ -1,5 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- Adapters: Excel (ClosedXML), JSON files, Web Push and the Windows alarm popup. -->
+  <!-- Adapters: PostgreSQL (EF Core), Excel export / import (ClosedXML) and Web Push. -->
   <ItemGroup>
     <ProjectReference Include="..\Rose.Application\Rose.Application.csproj" />
   </ItemGroup>
@@ -7,11 +7,16 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="ClosedXML" />
     <PackageReference Include="Lib.Net.Http.WebPush" />
-  </ItemGroup>
-  <ItemGroup>
-    <EmbeddedResource Include="Reminders\alarm.ps1" LogicalName="Rose.Infrastructure.alarm.ps1" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+    <PackageReference Include="EFCore.NamingConventions" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Rose.UnitTests" />
+    <InternalsVisibleTo Include="Rose.Api.IntegrationTests" />
   </ItemGroup>
 </Project>

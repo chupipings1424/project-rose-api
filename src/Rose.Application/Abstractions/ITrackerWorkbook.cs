@@ -4,22 +4,22 @@ using Rose.Domain.Tracker;
 namespace Rose.Application.Abstractions;
 
 /// <summary>
-/// Opens payments.xlsx. Only one <see cref="ITrackerWorkbook"/> is open at a time, so two
-/// requests can never overwrite each other's changes.
+/// Opens the tracker data (titles, payments, budget). Only one <see cref="ITrackerWorkbook"/> is
+/// open at a time, so two requests can never overwrite each other's changes.
 /// </summary>
 public interface ITrackerWorkbookStore
 {
-    /// <summary>Full path of the workbook (shown on the overview page).</summary>
-    string WorkbookPath { get; }
+    /// <summary>Where the data lives (shown on the overview page), e.g. "Supabase Postgres".</summary>
+    string StorageName { get; }
 
-    /// <summary>Opens the workbook (creating an empty one the first time). Dispose it to let the next caller in.</summary>
+    /// <summary>Opens a unit of work. Dispose it to let the next caller in.</summary>
     Task<ITrackerWorkbook> OpenAsync(CancellationToken cancellationToken = default);
 
-    /// <summary>The saved file, for downloading.</summary>
-    Task<byte[]> ReadAllBytesAsync(CancellationToken cancellationToken = default);
+    /// <summary>Everything as an Excel workbook, for downloading.</summary>
+    Task<byte[]> ExportAsync(CancellationToken cancellationToken = default);
 }
 
-/// <summary>A unit of work over the workbook: read, change, then <see cref="Save"/> once.</summary>
+/// <summary>A unit of work over the tracker data: read, change, then <see cref="SaveAsync"/> once.</summary>
 public interface ITrackerWorkbook : IDisposable
 {
     IReadOnlyList<Account> Accounts();
@@ -48,6 +48,6 @@ public interface ITrackerWorkbook : IDisposable
     bool DeleteBudgetLine(string id);
     int DeleteBudgetYear(int year);
 
-    /// <summary>Writes every change at once (atomically) and refreshes the "Budget YYYY" sheets.</summary>
-    void Save();
+    /// <summary>Writes every change at once, in one transaction. Disposing without saving discards them.</summary>
+    Task SaveAsync(CancellationToken cancellationToken = default);
 }

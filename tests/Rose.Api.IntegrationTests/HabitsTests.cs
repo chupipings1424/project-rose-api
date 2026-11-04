@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 
 namespace Rose.Api.IntegrationTests;
 
@@ -61,14 +62,17 @@ public sealed class HabitsTests(RoseApiFactory factory) : IClassFixture<RoseApiF
     }
 
     [Fact]
-    public async Task Habits_are_saved_to_habits_json()
+    public async Task Habits_are_saved_to_the_database()
     {
         var client = await factory.CreateAuthenticatedClientAsync();
         var id = (await (await client.PostAsJsonAsync(Url("items"), new { name = "Stretch" })).JsonAsync()).GetProperty("id").GetString();
         await client.PutAsJsonAsync(Url($"items/{id}/days/{Day(0)}"), new { value = 1 });
 
-        using var file = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(factory.DataDirectory, "habits.json")));
-        var saved = Assert.Single(file.RootElement.EnumerateArray(), h => h.GetProperty("id").GetString() == id);
-        Assert.Equal(1, saved.GetProperty("log").GetProperty(Day(0)).GetInt32());
+        await using var db = factory.Database();
+        var saved = await db.Habits.Include(h => h.Days).SingleAsync(h => h.Id == id);
+        Assert.Equal("Stretch", saved.Name);
+        var day = Assert.Single(saved.Days);
+        Assert.Equal(DateOnly.FromDateTime(DateTime.Today), day.Date);
+        Assert.Equal(1, day.Value);
     }
 }

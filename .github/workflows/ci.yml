@@ -10,8 +10,8 @@ permissions:
 
 jobs:
   build-and-test:
-    # Windows, because the desktop alarm and the time-zone tests target Windows.
-    runs-on: windows-latest
+    # Linux: the integration tests start a throw-away PostgreSQL container (Testcontainers).
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 

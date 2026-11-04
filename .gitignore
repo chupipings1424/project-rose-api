@@ -6,10 +6,11 @@ TestResults/
 .vs/
 .idea/
 
-# personal data: the Excel workbook, reminders, push devices and keys
+# old desktop data and any exported workbooks
 data/
 *.xlsx
 !tests/**/fixtures/*.xlsx
 
-# local secrets (the access token lives here)
+# local secrets (Supabase settings, connection strings)
 appsettings.Local.json
+.env

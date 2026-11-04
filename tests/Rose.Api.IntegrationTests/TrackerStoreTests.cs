@@ -1,33 +1,42 @@
+using System.Globalization;
 using ClosedXML.Excel;
-using Microsoft.Extensions.Options;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Rose.Application.Abstractions;
 using Rose.Application.Tracker;
 using Rose.Domain.Common;
-using Rose.Infrastructure;
-using Rose.Infrastructure.Excel;
-using Rose.UnitTests.Support;
+using Rose.Infrastructure.Persistence;
 
-namespace Rose.UnitTests.Infrastructure;
+namespace Rose.Api.IntegrationTests;
 
-/// <summary>Real payments.xlsx files in a temp folder: what goes in must come back out.</summary>
-public sealed class WorkbookRoundTripTests : IDisposable
+/// <summary>
+/// The payment tracker and budget against a real PostgreSQL database: what goes in must come back
+/// out. Each test gets its own empty database.
+/// </summary>
+public sealed class TrackerStoreTests : IDisposable
 {
-    private readonly TempDirectory _dir = new();
-    private readonly FakeClock _clock = new(new DateTimeOffset(2026, 3, 15, 9, 0, 0, TimeSpan.Zero));
-    private readonly ClosedXmlTrackerWorkbookStore _store;
+    private readonly RoseApiFactory _factory = new();
+    private readonly IServiceScope _scope;
     private readonly PaymentTrackerService _tracker;
     private readonly BudgetService _budget;
 
-    public WorkbookRoundTripTests()
+    public TrackerStoreTests()
     {
-        _store = new ClosedXmlTrackerWorkbookStore(Options.Create(new RoseOptions { DataDirectory = _dir.Path }), _clock);
-        _tracker = new PaymentTrackerService(_store, _clock);
-        _budget = new BudgetService(_store, _clock);
+        _scope = _factory.Services.CreateScope();
+        _tracker = _scope.ServiceProvider.GetRequiredService<PaymentTrackerService>();
+        _budget = _scope.ServiceProvider.GetRequiredService<BudgetService>();
     }
 
     public void Dispose()
     {
-        _store.Dispose();
-        _dir.Dispose();
+        _scope.Dispose();
+        _factory.Dispose();
+    }
+
+    private XLWorkbook Export()
+    {
+        var bytes = _factory.Services.GetRequiredService<ITrackerWorkbookStore>().ExportAsync().GetAwaiter().GetResult();
+        return new XLWorkbook(new MemoryStream(bytes));
     }
 
     [Fact]
@@ -53,17 +62,19 @@ public sealed class WorkbookRoundTripTests : IDisposable
     }
 
     [Fact]
-    public async Task Payments_survive_reopening_and_can_be_deleted()
+    public async Task Payments_survive_a_fresh_store_and_can_be_deleted()
     {
         await _tracker.CreateAccountAsync(new CreateAccountRequest("Rent", null, "100", null, "Monthly", null, null, null, null));
         var created = await _tracker.AddPaymentAsync(new AddPaymentRequest("Rent", "1,234.50", "2026-03-01", "13:05", null, null, "march"));
 
-        using (var fresh = new ClosedXmlTrackerWorkbookStore(Options.Create(new RoseOptions { DataDirectory = _dir.Path }), _clock))
+        using (var fresh = new PostgresTrackerStore(
+            _factory.Services.GetRequiredService<IDbContextFactory<RoseDbContext>>(), TimeProvider.System))
         {
-            var payment = Assert.Single((await new PaymentTrackerService(fresh, _clock).SummaryAsync("Rent")).Payments);
+            var payment = Assert.Single((await new PaymentTrackerService(fresh, TimeProvider.System).SummaryAsync("Rent")).Payments);
             Assert.Equal(1234.5, payment.Amount);
             Assert.Equal("1:05pm", payment.Time);
             Assert.Equal("Paid", payment.Status);
+            Assert.Equal("2026-03-01", payment.Date);
         }
 
         await _tracker.DeletePaymentAsync(created.Id);
@@ -71,16 +82,30 @@ public sealed class WorkbookRoundTripTests : IDisposable
     }
 
     [Fact]
-    public async Task Budget_changes_rebuild_the_year_report_sheet()
+    public async Task Deleting_a_title_removes_its_payments()
+    {
+        await _tracker.CreateAccountAsync(new CreateAccountRequest("Phone", null, "300", "3", "Monthly", "2026-01-15", null, null, null));
+
+        await _tracker.DeleteAccountAsync("phone");
+
+        await using var db = _factory.Database();
+        Assert.Empty(await db.Accounts.ToListAsync());
+        Assert.Empty(await db.Payments.ToListAsync());
+    }
+
+    [Fact]
+    public async Task Budget_changes_show_up_in_the_excel_export()
     {
         var line = await _budget.AddLineAsync(new AddBudgetLineRequest(
             "Expenses", "Home", "Rent", "2026", ["100", "200"], "flat"));
         await _budget.UpdateLineAsync(line.Id, new UpdateBudgetLineRequest("Mar", "42.5", null, null, null, null, null));
         await _budget.CopyYearAsync(new CopyBudgetYearRequest("2026", "2027", IncludeAmounts: true));
 
-        using var workbook = new XLWorkbook(Path.Combine(_dir.Path, "payments.xlsx"));
-        Assert.True(workbook.Worksheets.Contains("Budget 2026"));
-        Assert.True(workbook.Worksheets.Contains("Budget 2027"));
+        using (var workbook = Export())
+        {
+            Assert.True(workbook.Worksheets.Contains("Budget 2026"));
+            Assert.True(workbook.Worksheets.Contains("Budget 2027"));
+        }
 
         var view = await _budget.GetAsync("2027");
         var copied = Assert.Single(view.Section("Expense").Groups.SelectMany(g => g.Lines));
@@ -88,13 +113,13 @@ public sealed class WorkbookRoundTripTests : IDisposable
     }
 
     [Fact]
-    public async Task Deleting_the_last_line_of_a_year_removes_its_sheet()
+    public async Task Deleting_the_last_line_of_a_year_removes_it_from_the_export()
     {
         await _budget.AddLineAsync(new AddBudgetLineRequest("Revenue", "Income", "Salary", "2025", null, null));
 
         await _budget.DeleteYearAsync(2025);
 
-        using var workbook = new XLWorkbook(Path.Combine(_dir.Path, "payments.xlsx"));
+        using var workbook = Export();
         Assert.False(workbook.Worksheets.Contains("Budget 2025"));
     }
 
@@ -104,7 +129,7 @@ public sealed class WorkbookRoundTripTests : IDisposable
         await _tracker.CreateAccountAsync(new CreateAccountRequest("Rent", null, "100", null, "Monthly", null, null, null, null));
 
         await Task.WhenAll(Enumerable.Range(1, 20).Select(i =>
-            _tracker.AddPaymentAsync(new AddPaymentRequest("Rent", i.ToString(System.Globalization.CultureInfo.InvariantCulture), null, null, null, null, null))));
+            _tracker.AddPaymentAsync(new AddPaymentRequest("Rent", i.ToString(CultureInfo.InvariantCulture), null, null, null, null, null))));
 
         Assert.Equal(20, (await _tracker.SummaryAsync("Rent")).Payments.Count);
     }

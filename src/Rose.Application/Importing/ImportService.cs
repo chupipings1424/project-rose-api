@@ -8,7 +8,7 @@ namespace Rose.Application.Importing;
 
 /// <summary>
 /// Bulk import of history. A dry run only returns the plan; applying writes every accepted
-/// row and saves the workbook once (re-saving per row would be far too slow for a year of data).
+/// row and saves once, in a single transaction.
 /// </summary>
 public sealed class ImportService(ITrackerWorkbookStore store, IUploadReader reader, TimeProvider clock)
 {
@@ -32,7 +32,7 @@ public sealed class ImportService(ITrackerWorkbookStore store, IUploadReader rea
                 Guid.NewGuid().ToString(), entry.Year!.Value, entry.Section!, entry.Group!, entry.Item,
                 entry.Amounts!, entry.Total!.Value, entry.Notes ?? ""));
         }
-        book.Save();
+        await book.SaveAsync(ct);
 
         var years = additions.Concat(replacements).Select(e => e.Year!.Value).Distinct().Order().ToList();
         return plan with { Applied = true, Years = years };
@@ -62,7 +62,7 @@ public sealed class ImportService(ITrackerWorkbookStore store, IUploadReader rea
                 Guid.NewGuid().ToString(), entry.Item, entry.Amount!.Value, entry.Date!, entry.Time!,
                 entry.Status!, Coerce.Iso(entry.DueDate), entry.Note ?? ""));
         }
-        book.Save();
+        await book.SaveAsync(ct);
         return plan with { Applied = true };
     }
 }

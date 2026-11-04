@@ -1,38 +1,37 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.Options;
 
 namespace Rose.Api.Auth;
 
 [ApiController]
-[Route("api/auth")]
+[Route("api")]
 [Produces("application/json")]
-public sealed class AuthController(TokenService tokens) : ControllerBase
+[Tags("Auth")]
+public sealed class AuthController(IOptions<SupabaseOptions> supabase) : ControllerBase
 {
-    public const string LoginRateLimit = "login";
-
-    /// <summary>Exchange the access token for a session token.</summary>
-    /// <response code="401">The access token is wrong.</response>
-    /// <response code="429">Too many attempts; wait a minute.</response>
-    [HttpPost("login")]
+    /// <summary>What the React app needs to sign in with Supabase (both values are public).</summary>
+    [HttpGet("config")]
     [AllowAnonymous]
-    [EnableRateLimiting(LoginRateLimit)]
-    [ProducesResponseType<LoginResponse>(StatusCodes.Status200OK)]
-    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType<ProblemDetails>(StatusCodes.Status429TooManyRequests)]
-    public ActionResult<LoginResponse> Login(LoginRequest request)
-    {
-        if (!tokens.IsValidAccessToken(request.Token))
-            return Problem(statusCode: StatusCodes.Status401Unauthorized, detail: "Access denied - that token is not valid.");
-        return tokens.CreateSession();
-    }
+    public ClientConfig Config() => new(supabase.Value.Url, supabase.Value.PublishableKey);
 
-    /// <summary>Is this session token still valid?</summary>
-    [HttpGet("session")]
+    /// <summary>Is this Supabase token valid and allowed? Returns who is signed in.</summary>
+    /// <response code="401">Missing, expired or invalid token.</response>
+    /// <response code="403">Valid token, but that email may not use ROSE.</response>
+    [HttpGet("auth/session")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public SessionInfo Session()
     {
         var exp = User.FindFirstValue("exp");
-        return new SessionInfo(true, long.TryParse(exp, out var seconds) ? DateTimeOffset.FromUnixTimeSeconds(seconds) : null);
+        return new SessionInfo(
+            true,
+            User.FindFirstValue("email") ?? "",
+            long.TryParse(exp, out var seconds) ? DateTimeOffset.FromUnixTimeSeconds(seconds) : null);
     }
 }
+
+public sealed record ClientConfig(string SupabaseUrl, string SupabaseKey);
+
+public sealed record SessionInfo(bool Authenticated, string Email, DateTimeOffset? ExpiresAt);

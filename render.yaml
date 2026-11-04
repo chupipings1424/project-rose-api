@@ -1,0 +1,21 @@
+# Render Blueprint: Dashboard > New > Blueprint > pick this repo. Free plan, Singapore.
+# Values marked sync: false are asked for once in the dashboard (never stored in git).
+services:
+  - type: web
+    name: project-rose
+    runtime: docker
+    plan: free
+    region: singapore
+    branch: main
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: ConnectionStrings__Rose
+        sync: false
+      - key: Supabase__Url
+        sync: false
+      - key: Supabase__PublishableKey
+        sync: false
+      - key: Supabase__AllowedEmails__0
+        sync: false

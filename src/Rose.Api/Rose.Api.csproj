@@ -10,26 +10,7 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
-    <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" />
     <PackageReference Include="Swashbuckle.AspNetCore" />
-  </ItemGroup>
-  <!--
-    ROSE.exe: package-rose.cmd (UI repo) publishes with -p:RoseUiDist=<project-rose\dist>.
-    That embeds the built React app and makes one self-contained, windowless ROSE.exe that
-    needs no .NET or Node on the other laptop. Without RoseUiDist nothing here changes.
-  -->
-  <PropertyGroup Condition="'$(RoseUiDist)' != ''">
-    <AssemblyName>ROSE</AssemblyName>
-    <OutputType>WinExe</OutputType>
-    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
-    <SelfContained>true</SelfContained>
-    <PublishSingleFile>true</PublishSingleFile>
-    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
-    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
-    <GenerateEmbeddedFilesManifest>true</GenerateEmbeddedFilesManifest>
-  </PropertyGroup>
-  <ItemGroup Condition="'$(RoseUiDist)' != ''">
-    <EmbeddedResource Include="$(RoseUiDist)\**\*" Link="wwwroot\%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Samples\*.csv" LogicalName="Rose.Api.Samples.%(Filename)%(Extension)" />

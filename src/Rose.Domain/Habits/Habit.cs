@@ -27,7 +27,7 @@ public sealed class Habit
     /// <summary>The day the daily nudge last went out, so it goes out at most once a day.</summary>
     public DateOnly? NudgedOn { get; set; }
 
-    /// <summary>A "nudge me again at" time set by snoozing the popup.</summary>
+    /// <summary>A "nudge me again at" time set by snoozing the nudge.</summary>
     public DateTimeOffset? SnoozedUntil { get; set; }
 
     public required DateTimeOffset CreatedAt { get; init; }

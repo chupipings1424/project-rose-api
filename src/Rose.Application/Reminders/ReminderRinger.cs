@@ -5,9 +5,9 @@ using Rose.Domain.Reminders;
 
 namespace Rose.Application.Reminders;
 
-/// <summary>One scheduler step: finds what is due and rings it on the PC and on every phone.</summary>
+/// <summary>One scheduler step: finds what is due and rings it on every subscribed device.</summary>
 public sealed partial class ReminderRinger(
-    ReminderService reminders, PushService push, IDesktopAlarm alarm, TimeProvider clock, ILogger<ReminderRinger> logger)
+    ReminderService reminders, PushService push, TimeProvider clock, ILogger<ReminderRinger> logger)
     : IScheduledJob
 {
     private int busy;
@@ -18,7 +18,8 @@ public sealed partial class ReminderRinger(
         if (Interlocked.Exchange(ref busy, 1) == 1) return;
         try
         {
-            await Task.WhenAll(reminders.Tick().Select(r => RingAsync(r, cancellationToken)));
+            var due = await reminders.TickAsync(cancellationToken);
+            await Task.WhenAll(due.Select(r => RingAsync(r, cancellationToken)));
         }
         finally
         {
@@ -33,8 +34,6 @@ public sealed partial class ReminderRinger(
             ? time
             : $"{time} \u00B7 {ReminderRules.DescribeRepeat(reminder, reminders.Zone)}";
 
-        if (alarm.Enabled)
-            alarm.Show(new DesktopAlarmRequest(reminder.Id, reminder.Text, when, "TIME'S UP", $"/api/reminders/items/{reminder.Id}"));
         var result = await push.SendToAllAsync(
             new PushMessage($"\u23F0 {reminder.Text}", when, PushService.RemindersUrl, reminder.Id), ct);
         LogRang(reminder.Text, result.Sent, result.Failed);

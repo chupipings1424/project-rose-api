@@ -8,7 +8,7 @@ public sealed record ReminderRequest(string? Text, string? DueAt, string? Repeat
 /// <summary>Snooze for this many minutes (1 - 1440, default 10).</summary>
 public sealed record SnoozeRequest(double? Minutes);
 
-public sealed record ReminderStatus(bool Ok, int Devices, bool NativeAlarms, DateTimeOffset Now);
+public sealed record ReminderStatus(bool Ok, int Devices, DateTimeOffset Now);
 
 /// <summary>The browser's <c>PushSubscription.toJSON()</c>.</summary>
 public sealed record PushSubscriptionInfo(
@@ -35,7 +35,7 @@ public sealed record PushDevices(bool Ok, int Devices);
 
 public sealed record PushResult(int Sent, int Failed);
 
-/// <summary>A subscribed phone or browser, as saved in push-devices.json.</summary>
+/// <summary>A subscribed phone or browser, as saved in the push_devices table.</summary>
 public sealed record PushDevice(PushSubscriptionInfo Subscription, string Label, DateTimeOffset CreatedAt);
 
 /// <summary>What the service worker shows. Same <see cref="Tag"/> = replaces the previous notification.</summary>

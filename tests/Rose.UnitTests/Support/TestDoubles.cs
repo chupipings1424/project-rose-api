@@ -14,36 +14,39 @@ internal sealed class FakeClock(DateTimeOffset now, TimeZoneInfo? zone = null) :
     public void Advance(TimeSpan by) => Now += by;
 }
 
-/// <summary>An in-memory <see cref="IDataFile{T}"/> that counts writes.</summary>
-internal sealed class MemoryDataFile<T>(T initial) : IDataFile<T>
+/// <summary>An in-memory <see cref="IRepository{T}"/> that counts writes. <see cref="Stored"/> is "the database".</summary>
+internal sealed class MemoryRepository<T>(Func<T, string> key) : IRepository<T>
+    where T : class
 {
-    public T Value { get; private set; } = initial;
+    public List<T> Stored { get; } = [];
 
     public int Writes { get; private set; }
 
-    public T Read() => Value;
+    public Task<List<T>> LoadAllAsync(CancellationToken cancellationToken = default) => Task.FromResult<List<T>>([.. Stored]);
 
-    public void Write(T value)
+    public Task SaveAsync(IReadOnlyCollection<T> items, CancellationToken cancellationToken = default)
     {
-        Value = value;
+        foreach (var item in items)
+        {
+            var index = Stored.FindIndex(s => key(s) == key(item));
+            if (index >= 0) Stored[index] = item;
+            else Stored.Add(item);
+        }
         Writes++;
+        return Task.CompletedTask;
     }
-}
 
-/// <summary>A throw-away folder deleted when the test ends.</summary>
-internal sealed class TempDirectory : IDisposable
-{
-    public string Path { get; } = Directory.CreateTempSubdirectory("rose-tests-").FullName;
-
-    public void Dispose()
+    public Task DeleteAsync(string id, CancellationToken cancellationToken = default)
     {
-        try { Directory.Delete(Path, recursive: true); }
-        catch (IOException) { }
+        Stored.RemoveAll(s => key(s) == id);
+        Writes++;
+        return Task.CompletedTask;
     }
 }
 
 internal static class Zones
 {
     /// <summary>Berlin: DST starts on the last Sunday of March, ends on the last Sunday of October.</summary>
-    public static TimeZoneInfo Berlin { get; } = TimeZoneInfo.FindSystemTimeZoneById("W. Europe Standard Time");
+    public static TimeZoneInfo Berlin { get; } = TimeZoneInfo.FindSystemTimeZoneById(
+        OperatingSystem.IsWindows() ? "W. Europe Standard Time" : "Europe/Berlin");
 }

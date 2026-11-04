@@ -15,10 +15,10 @@ public sealed class WorkbookController(PaymentTrackerService tracker, ITrackerWo
     [HttpGet("now")]
     public ServerNow Now() => tracker.Now();
 
-    /// <summary>Download payments.xlsx.</summary>
+    /// <summary>Download everything (titles, payments, budget and yearly reports) as payments.xlsx.</summary>
     [HttpGet("download")]
     [Produces("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")]
     [ProducesResponseType<FileContentResult>(StatusCodes.Status200OK)]
     public async Task<FileContentResult> Download(CancellationToken ct) =>
-        File(await store.ReadAllBytesAsync(ct), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "payments.xlsx");
+        File(await store.ExportAsync(ct), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "payments.xlsx");
 }

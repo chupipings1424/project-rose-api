@@ -8,9 +8,11 @@ using static Rose.Infrastructure.Excel.WorkbookLayout;
 
 namespace Rose.Infrastructure.Excel;
 
-/// <summary>One open copy of the workbook. Changes stay in memory until <see cref="Save"/>.</summary>
-internal sealed class ClosedXmlTrackerWorkbook(XLWorkbook workbook, string path, TimeProvider clock, Action release)
-    : ITrackerWorkbook
+/// <summary>
+/// The tracker as an in-memory Excel workbook, in the original payments.xlsx layout. Used to
+/// build the download (<see cref="ExcelExport"/>) and to read such a file back in tests.
+/// </summary>
+internal sealed class ClosedXmlTrackerWorkbook(XLWorkbook workbook, TimeProvider clock) : ITrackerWorkbook
 {
     private List<Account>? accounts;
     private List<Payment>? payments;
@@ -283,12 +285,31 @@ internal sealed class ClosedXmlTrackerWorkbook(XLWorkbook workbook, string path,
 
     // ------------------------------------------------------------------ save
 
-    public void Save()
+    /// <summary>An empty workbook with both sheets and styled headers.</summary>
+    public static ClosedXmlTrackerWorkbook CreateEmpty(TimeProvider clock)
+    {
+        var workbook = new XLWorkbook();
+        StyleHeader(workbook.Worksheets.Add(WorkbookLayout.AccountsSheet), AccountHeaders, AccountWidths, 0);
+        StyleHeader(workbook.Worksheets.Add(WorkbookLayout.PaymentsSheet), PaymentHeaders, PaymentWidths, 0);
+        return new ClosedXmlTrackerWorkbook(workbook, clock);
+    }
+
+    /// <summary>Refreshes the "Budget YYYY" report sheets if the budget changed.</summary>
+    public Task SaveAsync(CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(disposed, this);
         if (budgetChanged) BudgetReportWriter.RebuildAll(workbook, BudgetLines());
-        ClosedXmlTrackerWorkbookStore.AtomicSave(workbook, path);
         budgetChanged = false;
+        return Task.CompletedTask;
+    }
+
+    /// <summary>The .xlsx file contents.</summary>
+    public byte[] ToBytes()
+    {
+        SaveAsync().GetAwaiter().GetResult();
+        using var stream = new MemoryStream();
+        workbook.SaveAs(stream);
+        return stream.ToArray();
     }
 
     public void Dispose()
@@ -296,7 +317,6 @@ internal sealed class ClosedXmlTrackerWorkbook(XLWorkbook workbook, string path,
         if (disposed) return;
         disposed = true;
         workbook.Dispose();
-        release();
     }
 
     // ------------------------------------------------------------------ helpers

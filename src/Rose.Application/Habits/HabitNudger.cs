@@ -8,7 +8,7 @@ namespace Rose.Application.Habits;
 
 /// <summary>One scheduler step: nudges every habit whose reminder time has come and that isn't done yet.</summary>
 public sealed partial class HabitNudger(
-    HabitService habits, PushService push, IDesktopAlarm alarm, TimeProvider clock, ILogger<HabitNudger> logger)
+    HabitService habits, PushService push, TimeProvider clock, ILogger<HabitNudger> logger)
     : IScheduledJob
 {
     public const string HabitsUrl = "/projects/habits";
@@ -21,7 +21,8 @@ public sealed partial class HabitNudger(
         if (Interlocked.Exchange(ref busy, 1) == 1) return;
         try
         {
-            await Task.WhenAll(habits.CollectNudges().Select(h => NudgeAsync(h, cancellationToken)));
+            var due = await habits.CollectNudgesAsync(cancellationToken);
+            await Task.WhenAll(due.Select(h => NudgeAsync(h, cancellationToken)));
         }
         finally
         {
@@ -32,8 +33,6 @@ public sealed partial class HabitNudger(
     private async Task NudgeAsync(Habit habit, CancellationToken ct)
     {
         var progress = HabitRules.Progress(habit, clock.Today());
-        if (alarm.Enabled)
-            alarm.Show(new DesktopAlarmRequest($"habit-{habit.Id}", habit.Name, progress, "HABIT CHECK-IN", $"/api/habits/items/{habit.Id}/nudge"));
         var icon = habit.Icon.Length > 0 ? habit.Icon : "\U0001F331";
         var result = await push.SendToAllAsync(new PushMessage($"{icon} {habit.Name}", progress, HabitsUrl, $"habit-{habit.Id}"), ct);
         LogNudged(habit.Name, result.Sent, result.Failed);

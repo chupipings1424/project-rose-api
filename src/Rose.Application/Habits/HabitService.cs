@@ -6,31 +6,22 @@ using Rose.Domain.Habits;
 namespace Rose.Application.Habits;
 
 /// <summary>
-/// All the rules for changing habits. Kept in memory and written back to habits.json on every
-/// change. A singleton: the scheduler and HTTP requests share it, so every method takes the lock.
+/// All the rules for changing habits. A singleton: the scheduler and HTTP requests share one
+/// cache, and every method holds it exclusively while it reads or changes a habit.
 /// </summary>
-public sealed class HabitService
+public sealed class HabitService(IRepository<Habit> repository, TimeProvider clock) : IDisposable
 {
-    private readonly IDataFile<List<Habit>> file;
-    private readonly TimeProvider clock;
-    private readonly Lock gate = new();
-    private readonly List<Habit> habits;
-
-    public HabitService(IDataFile<List<Habit>> file, TimeProvider clock)
-    {
-        this.file = file;
-        this.clock = clock;
-        habits = file.Read();
-    }
+    private readonly RepositoryCache<Habit> cache = new(repository);
 
     /// <summary>Every habit, oldest first, with today's progress and streaks.</summary>
-    public IReadOnlyList<HabitView> List()
+    public async Task<IReadOnlyList<HabitView>> ListAsync(CancellationToken ct = default)
     {
         var today = clock.Today();
-        lock (gate) return [.. habits.OrderBy(h => h.CreatedAt).Select(h => HabitRules.Summarize(h, today))];
+        using var session = await cache.OpenAsync(ct);
+        return [.. session.Items.OrderBy(h => h.CreatedAt).Select(h => HabitRules.Summarize(h, today))];
     }
 
-    public HabitView Create(HabitRequest request)
+    public async Task<HabitView> CreateAsync(HabitRequest request, CancellationToken ct = default)
     {
         var input = Parse(request);
         var now = clock.GetUtcNow();
@@ -45,106 +36,94 @@ public sealed class HabitService
         };
         HabitRules.Apply(habit, input);
         HabitRules.SetRemindAt(habit, input.RemindAt, clock.GetLocalNow());
-        lock (gate)
-        {
-            habits.Add(habit);
-            return Save(habit);
-        }
+        using var session = await cache.OpenAsync(ct);
+        session.Items.Add(habit);
+        return await SaveAsync(session, habit, ct);
     }
 
-    public HabitView Update(string id, HabitRequest request)
+    public Task<HabitView> UpdateAsync(string id, HabitRequest request, CancellationToken ct = default)
     {
         var input = Parse(request);
-        lock (gate)
+        return ChangeAsync(id, habit =>
         {
-            var habit = Get(id);
             HabitRules.Apply(habit, input);
             HabitRules.SetRemindAt(habit, input.RemindAt, clock.GetLocalNow());
-            return Save(habit);
-        }
+        }, ct);
     }
 
-    public void Remove(string id)
+    public async Task RemoveAsync(string id, CancellationToken ct = default)
     {
-        lock (gate)
-        {
-            habits.Remove(Get(id));
-            file.Write(habits);
-        }
+        using var session = await cache.OpenAsync(ct);
+        var habit = Get(session, id);
+        await session.DeleteAsync(habit.Id, ct);
+        session.Items.Remove(habit);
     }
 
     /// <summary>Sets how much was done on one day. Idempotent: sending the same value twice is harmless.</summary>
-    public HabitView SetDay(string id, string? date, int? value)
+    public Task<HabitView> SetDayAsync(string id, string? date, int? value, CancellationToken ct = default)
     {
         var day = HabitRules.ParseDay(date, clock.Today());
-        lock (gate)
-        {
-            var habit = Get(id);
-            HabitRules.SetDay(habit, day, HabitRules.ParseValue(habit, value));
-            return Save(habit);
-        }
+        return ChangeAsync(id, habit => HabitRules.SetDay(habit, day, HabitRules.ParseValue(habit, value)), ct);
     }
 
-    /// <summary>"Mark as done" on the nudge popup: today is complete.</summary>
-    public HabitView CompleteToday(string id)
-    {
-        lock (gate)
+    /// <summary>"Mark as done" from a nudge: today is complete.</summary>
+    public Task<HabitView> CompleteTodayAsync(string id, CancellationToken ct = default) =>
+        ChangeAsync(id, habit =>
         {
-            var habit = Get(id);
             HabitRules.SetDay(habit, clock.Today(), habit.Target);
             habit.SnoozedUntil = null;
-            return Save(habit);
-        }
-    }
+        }, ct);
 
-    /// <summary>"Dismiss" on the nudge popup: no more nudges today.</summary>
-    public HabitView DismissNudge(string id)
-    {
-        lock (gate)
+    /// <summary>"Dismiss" a nudge: no more nudges today.</summary>
+    public Task<HabitView> DismissNudgeAsync(string id, CancellationToken ct = default) =>
+        ChangeAsync(id, habit =>
         {
-            var habit = Get(id);
             habit.SnoozedUntil = null;
             habit.NudgedOn = clock.Today();
-            return Save(habit);
-        }
-    }
+        }, ct);
 
-    public HabitView SnoozeNudge(string id, double? minutes)
+    public Task<HabitView> SnoozeNudgeAsync(string id, double? minutes, CancellationToken ct = default)
     {
         var value = minutes ?? 10;
         if (!double.IsFinite(value) || value < 1 || value > 24 * 60)
             throw new ValidationException("Snooze between 1 minute and 24 hours.");
-        lock (gate)
+        return ChangeAsync(id, habit =>
         {
-            var habit = Get(id);
             habit.SnoozedUntil = clock.GetUtcNow().AddMinutes(value);
             habit.NudgedOn = clock.Today();
-            return Save(habit);
-        }
+        }, ct);
     }
 
     /// <summary>Called by the scheduler. Returns the habits to nudge now (and saves that they were nudged).</summary>
-    public IReadOnlyList<Habit> CollectNudges()
+    public async Task<IReadOnlyList<Habit>> CollectNudgesAsync(CancellationToken ct = default)
     {
-        lock (gate)
-        {
-            var due = HabitRules.CollectNudges(habits, clock.GetLocalNow());
-            if (due.Count > 0) file.Write(habits);
-            return [.. due.Select(h => h.Copy())];
-        }
+        using var session = await cache.OpenAsync(ct);
+        var due = HabitRules.CollectNudges(session.Items, clock.GetLocalNow());
+        if (due.Count > 0) await session.SaveAsync(due, ct);
+        return [.. due.Select(h => h.Copy())];
     }
+
+    public void Dispose() => cache.Dispose();
 
     private static HabitInput Parse(HabitRequest request) =>
         HabitRules.ParseHabit(request.Name, request.Icon, request.Kind, request.Target, request.Unit, request.RemindAt);
 
-    private Habit Get(string id) =>
-        habits.Find(h => h.Id == id) ?? throw new NotFoundException("That habit no longer exists.");
+    private static Habit Get(RepositoryCache<Habit>.Session session, string id) =>
+        session.Items.Find(h => h.Id == id) ?? throw new NotFoundException("That habit no longer exists.");
 
-    /// <summary>Stamps, writes the file and returns the fresh view. Call inside the lock.</summary>
-    private HabitView Save(Habit habit)
+    private async Task<HabitView> ChangeAsync(string id, Action<Habit> change, CancellationToken ct)
+    {
+        using var session = await cache.OpenAsync(ct);
+        var habit = Get(session, id);
+        change(habit);
+        return await SaveAsync(session, habit, ct);
+    }
+
+    /// <summary>Stamps, writes and returns the fresh view.</summary>
+    private async Task<HabitView> SaveAsync(RepositoryCache<Habit>.Session session, Habit habit, CancellationToken ct)
     {
         habit.UpdatedAt = clock.GetUtcNow();
-        file.Write(habits);
+        await session.SaveAsync(habit, ct);
         return HabitRules.Summarize(habit, clock.Today());
     }
 }
