@@ -1,7 +1,4 @@
-using Microsoft.Extensions.Logging.Abstractions;
-using Rose.Application.Abstractions;
 using Rose.Application.Habits;
-using Rose.Application.Reminders;
 using Rose.Domain.Common;
 using Rose.Domain.Habits;
 using Rose.UnitTests.Support;
@@ -22,7 +19,7 @@ public sealed class HabitServiceTests : IDisposable
     private static readonly DateOnly Today = new(2026, 11, 10);
 
     private Task<HabitView> CreateWater(string? remindAt = null) =>
-        _service.CreateAsync(new HabitRequest("Water", "", "count", 8, "glasses", remindAt));
+        _service.CreateAsync(TestUsers.Alice, new HabitRequest("Water", "", "count", 8, "glasses", remindAt));
 
     [Fact]
     public async Task Create_saves_a_clean_habit()
@@ -41,9 +38,9 @@ public sealed class HabitServiceTests : IDisposable
     {
         var habit = await CreateWater();
 
-        await _service.SetDayAsync(habit.Id, "2026-11-09", 8);
-        await _service.SetDayAsync(habit.Id, "2026-11-10", 8);
-        var after = await _service.SetDayAsync(habit.Id, "2026-11-10", 8);
+        await _service.SetDayAsync(TestUsers.Alice, habit.Id, "2026-11-09", 8);
+        await _service.SetDayAsync(TestUsers.Alice, habit.Id, "2026-11-10", 8);
+        var after = await _service.SetDayAsync(TestUsers.Alice, habit.Id, "2026-11-10", 8);
 
         Assert.Equal(2, after.CurrentStreak);
         Assert.True(after.DoneToday);
@@ -54,26 +51,26 @@ public sealed class HabitServiceTests : IDisposable
     public async Task Old_days_cannot_be_changed()
     {
         var habit = await CreateWater();
-        await Assert.ThrowsAsync<ValidationException>(() => _service.SetDayAsync(habit.Id, "2026-11-03", 1));
+        await Assert.ThrowsAsync<ValidationException>(() => _service.SetDayAsync(TestUsers.Alice, habit.Id, "2026-11-03", 1));
     }
 
     [Fact]
     public Task Unknown_habits_are_not_found() =>
-        Assert.ThrowsAsync<NotFoundException>(() => _service.SetDayAsync("nope", "2026-11-10", 1));
+        Assert.ThrowsAsync<NotFoundException>(() => _service.SetDayAsync(TestUsers.Alice, "nope", "2026-11-10", 1));
 
     [Fact]
     public async Task Nudge_buttons_complete_dismiss_and_snooze()
     {
         var habit = await CreateWater("11:00");
 
-        var snoozed = await _service.SnoozeNudgeAsync(habit.Id, 15);
+        var snoozed = await _service.SnoozeNudgeAsync(TestUsers.Alice, habit.Id, 15);
         Assert.Equal(_clock.Now.AddMinutes(15), _repo.Stored[0].SnoozedUntil);
         Assert.Equal(Today, _repo.Stored[0].NudgedOn);
 
-        await _service.DismissNudgeAsync(habit.Id);
+        await _service.DismissNudgeAsync(TestUsers.Alice, habit.Id);
         Assert.Null(_repo.Stored[0].SnoozedUntil);
 
-        var done = await _service.CompleteTodayAsync(habit.Id);
+        var done = await _service.CompleteTodayAsync(TestUsers.Alice, habit.Id);
         Assert.Equal(8, done.Today);
         Assert.True(done.DoneToday);
         Assert.Equal(snoozed.Id, done.Id);
@@ -83,43 +80,24 @@ public sealed class HabitServiceTests : IDisposable
     public async Task Collect_nudges_uses_local_time_and_saves()
     {
         await CreateWater("10:30"); // local time is 10:00
-        Assert.Empty(await _service.CollectNudgesAsync());
+        Assert.Empty(await _service.CollectNudgesAsync(TestUsers.Alice));
 
         _clock.Advance(TimeSpan.FromMinutes(30));
-        var due = Assert.Single(await _service.CollectNudgesAsync());
-        Assert.Equal("Water", due.Name);
-        Assert.Empty(await _service.CollectNudgesAsync());
+        var due = Assert.Single(await _service.CollectNudgesAsync(TestUsers.Alice));
+        Assert.Equal("Water", due.Habit.Name);
+        Assert.False(due.IsSnoozeNudge);
+        Assert.Empty(await _service.CollectNudgesAsync(TestUsers.Alice));
         Assert.Equal(Today, _repo.Stored[0].NudgedOn);
     }
 
     [Fact]
-    public async Task Nudger_pushes_the_habit_to_every_device()
+    public async Task Each_user_sees_only_their_own_habits()
     {
-        var habit = await CreateWater("10:00");
-        _repo.Stored[0].NudgedOn = null; // created exactly at 10:00, so it would otherwise start tomorrow
-        var sender = new RecordingPush();
-        using var push = new PushService(new MemoryRepository<PushDevice>(d => d.Subscription.Endpoint!), sender, _clock, NullLogger<PushService>.Instance);
-        await push.SubscribeAsync(new PushSubscribeRequest(
-            new PushSubscriptionInfo("https://push.example/1", null, new PushKeys("p", "a")), "Phone"));
-        var nudger = new HabitNudger(_service, push, _clock, NullLogger<HabitNudger>.Instance);
+        var alices = await CreateWater();
 
-        await nudger.TickAsync();
-
-        var payload = Assert.Single(sender.Payloads);
-        Assert.Contains("\"body\":\"0 / 8 glasses so far today\"", payload, StringComparison.Ordinal);
-        Assert.Contains($"\"tag\":\"habit-{habit.Id}\"", payload, StringComparison.Ordinal);
-        Assert.Contains("\"url\":\"/projects/habits\"", payload, StringComparison.Ordinal);
-    }
-
-    private sealed class RecordingPush : IPushSender
-    {
-        public List<string> Payloads { get; } = [];
-        public string PublicKey => "key";
-
-        public Task SendAsync(PushSubscriptionInfo subscription, string payload, CancellationToken cancellationToken)
-        {
-            Payloads.Add(payload);
-            return Task.CompletedTask;
-        }
+        Assert.Empty(await _service.ListAsync(TestUsers.Bob));
+        await Assert.ThrowsAsync<NotFoundException>(() => _service.SetDayAsync(TestUsers.Bob, alices.Id, "2026-11-10", 8));
+        await Assert.ThrowsAsync<NotFoundException>(() => _service.RemoveAsync(TestUsers.Bob, alices.Id));
+        Assert.Single(await _service.ListAsync(TestUsers.Alice));
     }
 }

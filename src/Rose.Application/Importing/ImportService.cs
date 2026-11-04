@@ -10,13 +10,13 @@ namespace Rose.Application.Importing;
 /// Bulk import of history. A dry run only returns the plan; applying writes every accepted
 /// row and saves once, in a single transaction.
 /// </summary>
-public sealed class ImportService(ITrackerWorkbookStore store, IUploadReader reader, TimeProvider clock)
+public sealed class ImportService(ITrackerWorkbookStore store, ICurrentUser user, IUploadReader reader, TimeProvider clock)
 {
     public async Task<ImportPlan> BudgetAsync(
         string fileName, byte[] content, string? mode, string? year, bool dryRun, CancellationToken ct = default)
     {
         var sheets = reader.Read(fileName, content);
-        using var book = await store.OpenAsync(ct);
+        using var book = await store.OpenAsync(user.Id, ct);
         var plan = ImportPlanner.AnalyzeBudget(sheets, year, mode, book.BudgetLines(), clock.Today().Year);
         if (dryRun) return plan;
 
@@ -42,7 +42,7 @@ public sealed class ImportService(ITrackerWorkbookStore store, IUploadReader rea
         string fileName, byte[] content, string? mode, bool dryRun, CancellationToken ct = default)
     {
         var sheets = reader.Read(fileName, content);
-        using var book = await store.OpenAsync(ct);
+        using var book = await store.OpenAsync(user.Id, ct);
         var plan = ImportPlanner.AnalyzePayments(sheets, mode, book.Accounts(), book.Payments());
         if (dryRun) return plan;
 

@@ -51,6 +51,9 @@ public static class HabitKind
 /// <summary>A validated create / edit request.</summary>
 public sealed record HabitInput(string Name, string Icon, string Kind, int Target, string Unit, TimeOnly? RemindAt);
 
+/// <summary>A habit to nudge now. <see cref="IsSnoozeNudge"/>: a repeat after a snooze, not today's first nudge.</summary>
+public sealed record HabitNudge(Habit Habit, bool IsSnoozeNudge);
+
 /// <summary>A habit plus everything calculated from it - what the API returns.</summary>
 /// <param name="RemindAt">"HH:mm", or null when there is no nudge.</param>
 /// <param name="Today">Amount done today.</param>

@@ -6,11 +6,11 @@ using Rose.Domain.Common;
 namespace Rose.Application.Tracker;
 
 /// <summary>The yearly budget (Revenue / Expense lines with twelve monthly amounts).</summary>
-public sealed class BudgetService(ITrackerWorkbookStore store, TimeProvider clock)
+public sealed class BudgetService(ITrackerWorkbookStore store, ICurrentUser user, TimeProvider clock)
 {
     public async Task<BudgetView> GetAsync(string? year, CancellationToken ct = default)
     {
-        using var book = await store.OpenAsync(ct);
+        using var book = await store.OpenAsync(user.Id, ct);
         return View(book, year);
     }
 
@@ -24,7 +24,7 @@ public sealed class BudgetService(ITrackerWorkbookStore store, TimeProvider cloc
         var year = YearOrCurrent(request.Year);
         var amounts = BudgetRules.CleanAmounts(request.Amounts);
 
-        using var book = await store.OpenAsync(ct);
+        using var book = await store.OpenAsync(user.Id, ct);
         if (book.BudgetLines().Any(l => l.Matches(year, section, group, item)))
             throw new ConflictException(BudgetRules.DuplicateMessage(item, group, year));
 
@@ -36,7 +36,7 @@ public sealed class BudgetService(ITrackerWorkbookStore store, TimeProvider cloc
 
     public async Task<BudgetChanged> UpdateLineAsync(string id, UpdateBudgetLineRequest request, CancellationToken ct = default)
     {
-        using var book = await store.OpenAsync(ct);
+        using var book = await store.OpenAsync(user.Id, ct);
         bool found;
         if (request.Month is not null)
         {
@@ -65,7 +65,7 @@ public sealed class BudgetService(ITrackerWorkbookStore store, TimeProvider cloc
 
     public async Task<BudgetChanged> DeleteLineAsync(string id, string? year, CancellationToken ct = default)
     {
-        using var book = await store.OpenAsync(ct);
+        using var book = await store.OpenAsync(user.Id, ct);
         if (!book.DeleteBudgetLine(id)) throw new NotFoundException("Budget line not found.");
         await book.SaveAsync(ct);
         return new BudgetChanged(true, View(book, year));
@@ -75,7 +75,7 @@ public sealed class BudgetService(ITrackerWorkbookStore store, TimeProvider cloc
     public async Task<BudgetYearDeleted> DeleteYearAsync(int year, CancellationToken ct = default)
     {
         if (year <= 0) throw new ValidationException("A valid year is required.");
-        using var book = await store.OpenAsync(ct);
+        using var book = await store.OpenAsync(user.Id, ct);
         var removed = book.DeleteBudgetYear(year);
         if (removed == 0) throw new NotFoundException($"No budget lines found for {year}.");
         await book.SaveAsync(ct);
@@ -89,7 +89,7 @@ public sealed class BudgetService(ITrackerWorkbookStore store, TimeProvider cloc
         var to = Coerce.ToInt(request.To);
         if (from == to) throw new ValidationException("Source and target years must differ.");
 
-        using var book = await store.OpenAsync(ct);
+        using var book = await store.OpenAsync(user.Id, ct);
         var lines = book.BudgetLines();
         var source = lines.Where(l => l.Year == from).ToList();
         if (source.Count == 0) throw new ValidationException($"No budget lines found for {from}.");

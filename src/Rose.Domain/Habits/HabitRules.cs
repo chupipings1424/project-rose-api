@@ -186,18 +186,19 @@ public static class HabitRules
     }
 
     /// <summary>Called by the scheduler: marks what nudges now (once a day) and returns it.</summary>
-    public static IReadOnlyList<Habit> CollectNudges(IEnumerable<Habit> habits, DateTimeOffset localNow)
+    public static IReadOnlyList<HabitNudge> CollectNudges(IEnumerable<Habit> habits, DateTimeOffset localNow)
     {
         var today = DateOnly.FromDateTime(localNow.DateTime);
-        var due = new List<Habit>();
+        var due = new List<HabitNudge>();
         foreach (var habit in habits)
         {
             // A snooze from yesterday (e.g. the PC was off) is stale - today follows the normal time.
             if (habit.SnoozedUntil is { } snoozed && IsStale(snoozed, localNow)) habit.SnoozedUntil = null;
             if (!ShouldNudge(habit, localNow)) continue;
+            var afterSnooze = habit.SnoozedUntil is not null;
             habit.NudgedOn = today;
             habit.SnoozedUntil = null;
-            due.Add(habit);
+            due.Add(new HabitNudge(habit, afterSnooze));
         }
         return due;
     }

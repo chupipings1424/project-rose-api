@@ -37,6 +37,12 @@ public sealed class Reminder
     }
 }
 
+/// <summary>
+/// A reminder that rings now. <see cref="IsSnoozeRing"/>: it only rings again because a snooze
+/// ended, so it is not a new occurrence (no second email for it).
+/// </summary>
+public sealed record ReminderRing(Reminder Reminder, bool IsSnoozeRing);
+
 /// <summary>A validated create / edit request.</summary>
 public sealed record ReminderInput(string Text, DateTimeOffset DueAt, string Repeat, IReadOnlyList<int> WeekDays);
 

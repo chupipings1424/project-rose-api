@@ -11,31 +11,31 @@ namespace Rose.Api.IntegrationTests;
 
 /// <summary>
 /// The payment tracker and budget against a real PostgreSQL database: what goes in must come back
-/// out. Each test gets its own empty database.
+/// out. Each test gets its own empty database; everything is saved as one user.
 /// </summary>
 public sealed class TrackerStoreTests : IDisposable
 {
     private readonly RoseApiFactory _factory = new();
-    private readonly IServiceScope _scope;
+    private static readonly FixedUser Me = new FixedUser(RoseApiFactory.UserIdFor(RoseApiFactory.AdminEmail));
+    private readonly ITrackerWorkbookStore _store;
     private readonly PaymentTrackerService _tracker;
     private readonly BudgetService _budget;
 
     public TrackerStoreTests()
     {
-        _scope = _factory.Services.CreateScope();
-        _tracker = _scope.ServiceProvider.GetRequiredService<PaymentTrackerService>();
-        _budget = _scope.ServiceProvider.GetRequiredService<BudgetService>();
+        _store = _factory.Services.GetRequiredService<ITrackerWorkbookStore>();
+        _tracker = new PaymentTrackerService(_store, Me, TimeProvider.System);
+        _budget = new BudgetService(_store, Me, TimeProvider.System);
     }
 
     public void Dispose()
     {
-        _scope.Dispose();
         _factory.Dispose();
     }
 
     private XLWorkbook Export()
     {
-        var bytes = _factory.Services.GetRequiredService<ITrackerWorkbookStore>().ExportAsync().GetAwaiter().GetResult();
+        var bytes = _store.ExportAsync(Me.Id).GetAwaiter().GetResult();
         return new XLWorkbook(new MemoryStream(bytes));
     }
 
@@ -70,7 +70,7 @@ public sealed class TrackerStoreTests : IDisposable
         using (var fresh = new PostgresTrackerStore(
             _factory.Services.GetRequiredService<IDbContextFactory<RoseDbContext>>(), TimeProvider.System))
         {
-            var payment = Assert.Single((await new PaymentTrackerService(fresh, TimeProvider.System).SummaryAsync("Rent")).Payments);
+            var payment = Assert.Single((await new PaymentTrackerService(fresh, Me, TimeProvider.System).SummaryAsync("Rent")).Payments);
             Assert.Equal(1234.5, payment.Amount);
             Assert.Equal("1:05pm", payment.Time);
             Assert.Equal("Paid", payment.Status);
@@ -133,4 +133,22 @@ public sealed class TrackerStoreTests : IDisposable
 
         Assert.Equal(20, (await _tracker.SummaryAsync("Rent")).Payments.Count);
     }
+
+    [Fact]
+    public async Task Another_user_has_an_empty_tracker_of_their_own()
+    {
+        await _tracker.CreateAccountAsync(new CreateAccountRequest("Rent", null, "100", "2", "Monthly", "2026-01-31", null, null, null));
+        var bob = new FixedUser(Guid.NewGuid());
+        var theirs = new PaymentTrackerService(_store, bob, TimeProvider.System);
+
+        Assert.Empty(await theirs.AccountsAsync());
+        await theirs.CreateAccountAsync(new CreateAccountRequest("Rent", null, "5", null, "Monthly", null, null, null, null));
+
+        Assert.Single(await theirs.AccountsAsync());
+        Assert.Equal(2, (await _tracker.SummaryAsync("Rent")).Payments.Count);
+        using var workbook = new XLWorkbook(new MemoryStream(await _store.ExportAsync(bob.Id)));
+        Assert.Equal(2, workbook.Worksheet("Accounts").RowsUsed().Count()); // header + Bob's one title
+    }
+
+    private sealed record FixedUser(Guid Id) : ICurrentUser;
 }

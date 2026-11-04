@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Rose.Api.Auth;
 
-/// <summary>The "Supabase" section: which Supabase project signs users in, and who may use ROSE.</summary>
+/// <summary>The "Supabase" section: which Supabase project signs users in.</summary>
 public sealed class SupabaseOptions
 {
     public const string Section = "Supabase";
@@ -21,8 +21,7 @@ public sealed class SupabaseOptions
     /// </summary>
     public string? JwtSecret { get; set; }
 
-    /// <summary>Only these accounts may use the API (case-insensitive). Empty = nobody.</summary>
-    public List<string> AllowedEmails { get; set; } = [];
+    // SecretKey (for the admin page) is read by Rose.Infrastructure's SupabaseAdminOptions.
 
     public string Issuer => $"{Url.TrimEnd('/')}/auth/v1";
 }

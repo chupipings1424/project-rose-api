@@ -11,3 +11,6 @@ public sealed class ConflictException(string message) : RoseException(message);
 
 /// <summary>The thing asked for does not exist (HTTP 404).</summary>
 public sealed class NotFoundException(string message) : RoseException(message);
+
+/// <summary>A server feature that is not set up yet, e.g. a missing key (HTTP 503).</summary>
+public sealed class UnavailableException(string message) : RoseException(message);

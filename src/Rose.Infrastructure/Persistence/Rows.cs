@@ -4,8 +4,16 @@ namespace Rose.Infrastructure.Persistence;
 // persistence concerns and the table layout can change without touching business rules.
 // Mappers.cs converts between the two.
 
-internal sealed class AccountRow
+/// <summary>A top-level row that belongs to one user (child rows belong to theirs through the parent).</summary>
+internal interface IOwnedRow
 {
+    /// <summary>The user's id. <see cref="Guid.Empty"/> = saved before ROSE had accounts (claimed by the first admin).</summary>
+    Guid OwnerId { get; set; }
+}
+
+internal sealed class AccountRow : IOwnedRow
+{
+    public Guid OwnerId { get; set; }
     public long Seq { get; set; }
     public string Title { get; set; } = "";
     public double TotalAmount { get; set; }
@@ -17,8 +25,9 @@ internal sealed class AccountRow
     public string Notes { get; set; } = "";
 }
 
-internal sealed class PaymentRow
+internal sealed class PaymentRow : IOwnedRow
 {
+    public Guid OwnerId { get; set; }
     public string Id { get; set; } = "";
     public long Seq { get; set; }
     public string Title { get; set; } = "";
@@ -30,8 +39,9 @@ internal sealed class PaymentRow
     public string Note { get; set; } = "";
 }
 
-internal sealed class BudgetLineRow
+internal sealed class BudgetLineRow : IOwnedRow
 {
+    public Guid OwnerId { get; set; }
     public string Id { get; set; } = "";
     public long Seq { get; set; }
     public int Year { get; set; }
@@ -42,8 +52,9 @@ internal sealed class BudgetLineRow
     public string Notes { get; set; } = "";
 }
 
-internal sealed class ReminderRow
+internal sealed class ReminderRow : IOwnedRow
 {
+    public Guid OwnerId { get; set; }
     public string Id { get; set; } = "";
     public string Text { get; set; } = "";
     public DateTimeOffset DueAt { get; set; }
@@ -58,8 +69,9 @@ internal sealed class ReminderRow
     public DateTimeOffset UpdatedAt { get; set; }
 }
 
-internal sealed class PushDeviceRow
+internal sealed class PushDeviceRow : IOwnedRow
 {
+    public Guid OwnerId { get; set; }
     public string Endpoint { get; set; } = "";
     public string P256dh { get; set; } = "";
     public string Auth { get; set; } = "";
@@ -68,8 +80,9 @@ internal sealed class PushDeviceRow
     public DateTimeOffset CreatedAt { get; set; }
 }
 
-internal sealed class SavingsGoalRow
+internal sealed class SavingsGoalRow : IOwnedRow
 {
+    public Guid OwnerId { get; set; }
     public string Id { get; set; } = "";
     public string Name { get; set; } = "";
     public string Icon { get; set; } = "";
@@ -90,8 +103,9 @@ internal sealed class SavingsEntryRow
     public string Note { get; set; } = "";
 }
 
-internal sealed class HabitRow
+internal sealed class HabitRow : IOwnedRow
 {
+    public Guid OwnerId { get; set; }
     public string Id { get; set; } = "";
     public string Name { get; set; } = "";
     public string Icon { get; set; } = "";
@@ -111,6 +125,15 @@ internal sealed class HabitDayRow
     public string HabitId { get; set; } = "";
     public DateOnly Date { get; set; }
     public int Value { get; set; }
+}
+
+/// <summary>A ROSE account; <see cref="Id"/> is the Supabase user id.</summary>
+internal sealed class UserRow
+{
+    public Guid Id { get; set; }
+    public string Email { get; set; } = "";
+    public bool MustChangePassword { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
 }
 
 /// <summary>Small server-side settings, e.g. the VAPID keys when they are not configured.</summary>

@@ -1,15 +1,20 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 using Npgsql;
+using Rose.Application.Abstractions;
+using Rose.Domain.Common;
 using Rose.Infrastructure.Persistence;
 using Testcontainers.PostgreSql;
 
@@ -17,14 +22,14 @@ namespace Rose.Api.IntegrationTests;
 
 /// <summary>
 /// Hosts the real API in memory against its own fresh PostgreSQL database (in a throw-away
-/// Docker container), with test-only Supabase settings and no background scheduler.
+/// Docker container), with test-only Supabase settings, fake logins and email, and no background scheduler.
 /// Nothing touches your real data. Requires Docker Desktop to be running.
 /// </summary>
 public sealed class RoseApiFactory : WebApplicationFactory<Program>
 {
     public const string SupabaseUrl = "https://test-project.supabase.co";
     public const string JwtSecret = "integration-tests-only-secret-0123456789abcdef";
-    public const string AllowedEmail = "rose@example.com";
+    public const string AdminEmail = "rose@example.com";
 
     private readonly string _connectionString = PostgresServer.NewDatabase();
 
@@ -35,13 +40,30 @@ public sealed class RoseApiFactory : WebApplicationFactory<Program>
         builder.UseSetting("Supabase:Url", SupabaseUrl);
         builder.UseSetting("Supabase:PublishableKey", "sb_publishable_test");
         builder.UseSetting("Supabase:JwtSecret", JwtSecret);
-        builder.UseSetting("Supabase:AllowedEmails:0", AllowedEmail);
+        builder.UseSetting("Access:AdminEmails:0", AdminEmail);
         builder.UseSetting("Reminders:SchedulerEnabled", "false");
+        builder.ConfigureTestServices(services =>
+        {
+            services.RemoveAll<IAccountProvider>();
+            services.AddSingleton<IAccountProvider>(Accounts);
+            services.RemoveAll<IEmailSender>();
+            services.AddSingleton<IEmailSender>(Emails);
+        });
     }
+
+    /// <summary>The Supabase logins the admin endpoints created (instead of real Supabase).</summary>
+    public TestAccounts Accounts { get; } = new();
+
+    /// <summary>Emails the server would have sent.</summary>
+    public TestEmails Emails { get; } = new();
+
+    /// <summary>The Supabase user id of an email: always the same, like a real account.</summary>
+    public static Guid UserIdFor(string email) => new(SHA256.HashData(Encoding.UTF8.GetBytes(email.Trim().ToLowerInvariant()))[..16]);
 
     /// <summary>A Supabase-style access token, signed with the test secret.</summary>
     public static string Token(
-        string email = AllowedEmail, string issuer = $"{SupabaseUrl}/auth/v1", DateTime? expires = null, string role = "authenticated")
+        string email = AdminEmail, string issuer = $"{SupabaseUrl}/auth/v1", DateTime? expires = null, string role = "authenticated",
+        Guid? userId = null)
     {
         var expiry = expires ?? DateTime.UtcNow.AddHours(1);
         return new JsonWebTokenHandler { SetDefaultTimesOnTokenCreation = false }.CreateToken(new SecurityTokenDescriptor
@@ -51,13 +73,13 @@ public sealed class RoseApiFactory : WebApplicationFactory<Program>
             IssuedAt = expiry.AddHours(-1),
             NotBefore = expiry.AddHours(-1),
             Expires = expiry,
-            Subject = new ClaimsIdentity([new Claim("sub", Guid.NewGuid().ToString()), new Claim("email", email), new Claim("role", role)]),
+            Subject = new ClaimsIdentity([new Claim("sub", (userId ?? UserIdFor(email)).ToString()), new Claim("email", email), new Claim("role", role)]),
             SigningCredentials = new SigningCredentials(
                 new SymmetricSecurityKey(Encoding.UTF8.GetBytes(JwtSecret)), SecurityAlgorithms.HmacSha256),
         });
     }
 
-    /// <summary>A client signed in as the allowed user.</summary>
+    /// <summary>A client signed in as the admin.</summary>
     public Task<HttpClient> CreateAuthenticatedClientAsync() => Task.FromResult(CreateClientWith(Token()));
 
     public HttpClient CreateClientWith(string token)
@@ -98,6 +120,50 @@ internal static class PostgresServer
         {
             Database = $"rose_{Guid.NewGuid():N}",
         }.ConnectionString;
+}
+
+/// <summary>Supabase logins, kept in memory: id -> (email, password).</summary>
+public sealed class TestAccounts : IAccountProvider
+{
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, (string Email, string Password)> logins = new();
+
+    public bool IsConfigured => true;
+
+    public IReadOnlyDictionary<Guid, (string Email, string Password)> Logins => logins;
+
+    public Task<Guid> CreateAsync(string email, string password, CancellationToken cancellationToken = default)
+    {
+        if (logins.Values.Any(l => l.Email == email)) throw new ConflictException("That email already has a login.");
+        var id = RoseApiFactory.UserIdFor(email);
+        logins[id] = (email, password);
+        return Task.FromResult(id);
+    }
+
+    public Task SetPasswordAsync(Guid id, string password, CancellationToken cancellationToken = default)
+    {
+        if (!logins.TryGetValue(id, out var login)) throw new NotFoundException("That login no longer exists in Supabase.");
+        logins[id] = (login.Email, password);
+        return Task.CompletedTask;
+    }
+
+    public Task DeleteAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        logins.TryRemove(id, out _);
+        return Task.CompletedTask;
+    }
+}
+
+public sealed class TestEmails : IEmailSender
+{
+    public bool IsConfigured => true;
+
+    public System.Collections.Concurrent.ConcurrentQueue<EmailMessage> Sent { get; } = new();
+
+    public Task SendAsync(EmailMessage message, CancellationToken cancellationToken = default)
+    {
+        Sent.Enqueue(message);
+        return Task.CompletedTask;
+    }
 }
 
 internal static class HttpExtensions

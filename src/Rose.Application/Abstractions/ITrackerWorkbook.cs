@@ -4,19 +4,19 @@ using Rose.Domain.Tracker;
 namespace Rose.Application.Abstractions;
 
 /// <summary>
-/// Opens the tracker data (titles, payments, budget). Only one <see cref="ITrackerWorkbook"/> is
-/// open at a time, so two requests can never overwrite each other's changes.
+/// Opens one user's tracker data (titles, payments, budget). Only one <see cref="ITrackerWorkbook"/> per
+/// user is open at a time, so two requests can never overwrite each other's changes.
 /// </summary>
 public interface ITrackerWorkbookStore
 {
     /// <summary>Where the data lives (shown on the overview page), e.g. "Supabase Postgres".</summary>
     string StorageName { get; }
 
-    /// <summary>Opens a unit of work. Dispose it to let the next caller in.</summary>
-    Task<ITrackerWorkbook> OpenAsync(CancellationToken cancellationToken = default);
+    /// <summary>Opens a unit of work over <paramref name="owner"/>'s data. Dispose it to let the next caller in.</summary>
+    Task<ITrackerWorkbook> OpenAsync(Guid owner, CancellationToken cancellationToken = default);
 
-    /// <summary>Everything as an Excel workbook, for downloading.</summary>
-    Task<byte[]> ExportAsync(CancellationToken cancellationToken = default);
+    /// <summary>All of <paramref name="owner"/>'s data as an Excel workbook, for downloading.</summary>
+    Task<byte[]> ExportAsync(Guid owner, CancellationToken cancellationToken = default);
 }
 
 /// <summary>A unit of work over the tracker data: read, change, then <see cref="SaveAsync"/> once.</summary>

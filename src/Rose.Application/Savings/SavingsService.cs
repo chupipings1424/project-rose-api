@@ -7,21 +7,21 @@ namespace Rose.Application.Savings;
 
 /// <summary>
 /// All the rules for changing savings goals. A singleton shared by all requests: every method
-/// holds the cache exclusively while it reads or changes a goal.
+/// holds one user's goals exclusively while it reads or changes them.
 /// </summary>
-public sealed class SavingsService(IRepository<SavingsGoal> repository, TimeProvider clock) : IDisposable
+public sealed class SavingsService(IRepository<SavingsGoal> repository, TimeProvider clock) : IDisposable, IUserScopedCache
 {
     private readonly RepositoryCache<SavingsGoal> cache = new(repository);
 
     /// <summary>Every goal, oldest first, with its progress worked out for today.</summary>
-    public async Task<IReadOnlyList<SavingsGoalView>> ListAsync(CancellationToken ct = default)
+    public async Task<IReadOnlyList<SavingsGoalView>> ListAsync(Guid owner, CancellationToken ct = default)
     {
         var today = clock.Today();
-        using var session = await cache.OpenAsync(ct);
+        using var session = await cache.OpenAsync(owner, ct);
         return [.. session.Items.OrderBy(g => g.CreatedAt).Select(g => SavingsRules.Summarize(g, today))];
     }
 
-    public async Task<SavingsGoalView> CreateAsync(GoalRequest request, CancellationToken ct = default)
+    public async Task<SavingsGoalView> CreateAsync(Guid owner, GoalRequest request, CancellationToken ct = default)
     {
         var input = Parse(request);
         var now = clock.GetUtcNow();
@@ -35,15 +35,15 @@ public sealed class SavingsService(IRepository<SavingsGoal> repository, TimeProv
             CreatedAt = now,
             UpdatedAt = now,
         };
-        using var session = await cache.OpenAsync(ct);
+        using var session = await cache.OpenAsync(owner, ct);
         session.Items.Add(goal);
         return await SaveAsync(session, goal, ct);
     }
 
-    public Task<SavingsGoalView> UpdateAsync(string id, GoalRequest request, CancellationToken ct = default)
+    public Task<SavingsGoalView> UpdateAsync(Guid owner, string id, GoalRequest request, CancellationToken ct = default)
     {
         var input = Parse(request);
-        return ChangeAsync(id, goal =>
+        return ChangeAsync(owner, id, goal =>
         {
             goal.Name = input.Name;
             goal.Icon = input.Icon;
@@ -52,24 +52,24 @@ public sealed class SavingsService(IRepository<SavingsGoal> repository, TimeProv
         }, ct);
     }
 
-    public async Task RemoveAsync(string id, CancellationToken ct = default)
+    public async Task RemoveAsync(Guid owner, string id, CancellationToken ct = default)
     {
-        using var session = await cache.OpenAsync(ct);
+        using var session = await cache.OpenAsync(owner, ct);
         var goal = Get(session, id);
         await session.DeleteAsync(goal.Id, ct);
         session.Items.Remove(goal);
     }
 
-    public Task<SavingsGoalView> AddEntryAsync(string id, EntryRequest request, CancellationToken ct = default) =>
-        ChangeAsync(id, goal =>
+    public Task<SavingsGoalView> AddEntryAsync(Guid owner, string id, EntryRequest request, CancellationToken ct = default) =>
+        ChangeAsync(owner, id, goal =>
         {
             var input = SavingsRules.ParseEntry(
                 request.Kind, request.Amount, request.Date, request.Note, SavingsRules.Saved(goal), clock.Today());
             goal.Entries.Add(new SavingsEntry(Guid.NewGuid().ToString(), input.Date, input.Amount, input.Note));
         }, ct);
 
-    public Task<SavingsGoalView> RemoveEntryAsync(string id, string entryId, CancellationToken ct = default) =>
-        ChangeAsync(id, goal =>
+    public Task<SavingsGoalView> RemoveEntryAsync(Guid owner, string id, string entryId, CancellationToken ct = default) =>
+        ChangeAsync(owner, id, goal =>
         {
             var entry = goal.Entries.Find(e => e.Id == entryId)
                 ?? throw new NotFoundException("That entry no longer exists.");
@@ -77,6 +77,9 @@ public sealed class SavingsService(IRepository<SavingsGoal> repository, TimeProv
                 throw new ValidationException("Deleting this deposit would leave less than zero saved - delete a withdrawal first.");
             goal.Entries.Remove(entry);
         }, ct);
+
+    /// <summary>Forgets a deleted user's cached goals.</summary>
+    public void Forget(Guid owner) => cache.Forget(owner);
 
     public void Dispose() => cache.Dispose();
 
@@ -86,9 +89,9 @@ public sealed class SavingsService(IRepository<SavingsGoal> repository, TimeProv
     private static SavingsGoal Get(RepositoryCache<SavingsGoal>.Session session, string id) =>
         session.Items.Find(g => g.Id == id) ?? throw new NotFoundException("That goal no longer exists.");
 
-    private async Task<SavingsGoalView> ChangeAsync(string id, Action<SavingsGoal> change, CancellationToken ct)
+    private async Task<SavingsGoalView> ChangeAsync(Guid owner, string id, Action<SavingsGoal> change, CancellationToken ct)
     {
-        using var session = await cache.OpenAsync(ct);
+        using var session = await cache.OpenAsync(owner, ct);
         var goal = Get(session, id);
         change(goal);
         return await SaveAsync(session, goal, ct);

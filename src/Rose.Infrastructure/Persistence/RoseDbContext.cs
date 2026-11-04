@@ -19,6 +19,7 @@ public sealed class RoseDbContext(DbContextOptions<RoseDbContext> options) : DbC
     internal DbSet<SavingsGoalRow> SavingsGoals => Set<SavingsGoalRow>();
     internal DbSet<HabitRow> Habits => Set<HabitRow>();
     internal DbSet<AppSecretRow> AppSecrets => Set<AppSecretRow>();
+    internal DbSet<UserRow> Users => Set<UserRow>();
 
     /// <summary>The one place the provider is configured (app, tests and design-time tools).</summary>
     public static void Configure(DbContextOptionsBuilder options, string connectionString, Action<NpgsqlDbContextOptionsBuilder>? npgsql = null) =>
@@ -39,6 +40,7 @@ public sealed class RoseDbContext(DbContextOptions<RoseDbContext> options) : DbC
             e.ToTable("accounts");
             e.HasKey(x => x.Seq);
             e.Property(x => x.Seq).UseIdentityAlwaysColumn();
+            e.HasIndex(x => x.OwnerId);
         });
 
         modelBuilder.Entity<PaymentRow>(e =>
@@ -46,7 +48,7 @@ public sealed class RoseDbContext(DbContextOptions<RoseDbContext> options) : DbC
             e.ToTable("payments");
             e.HasKey(x => x.Id);
             e.Property(x => x.Seq).UseIdentityAlwaysColumn();
-            e.HasIndex(x => x.Title);
+            e.HasIndex(x => new { x.OwnerId, x.Title });
         });
 
         modelBuilder.Entity<BudgetLineRow>(e =>
@@ -54,25 +56,28 @@ public sealed class RoseDbContext(DbContextOptions<RoseDbContext> options) : DbC
             e.ToTable("budget_lines");
             e.HasKey(x => x.Id);
             e.Property(x => x.Seq).UseIdentityAlwaysColumn();
-            e.HasIndex(x => x.Year);
+            e.HasIndex(x => new { x.OwnerId, x.Year });
         });
 
         modelBuilder.Entity<ReminderRow>(e =>
         {
             e.ToTable("reminders");
             e.HasKey(x => x.Id);
+            e.HasIndex(x => x.OwnerId);
         });
 
         modelBuilder.Entity<PushDeviceRow>(e =>
         {
             e.ToTable("push_devices");
             e.HasKey(x => x.Endpoint);
+            e.HasIndex(x => x.OwnerId);
         });
 
         modelBuilder.Entity<SavingsGoalRow>(e =>
         {
             e.ToTable("savings_goals");
             e.HasKey(x => x.Id);
+            e.HasIndex(x => x.OwnerId);
             e.Property(x => x.Target).HasColumnType("numeric");
             e.HasMany(x => x.Entries).WithOne().HasForeignKey(x => x.GoalId).OnDelete(DeleteBehavior.Cascade);
         });
@@ -88,6 +93,7 @@ public sealed class RoseDbContext(DbContextOptions<RoseDbContext> options) : DbC
         {
             e.ToTable("habits");
             e.HasKey(x => x.Id);
+            e.HasIndex(x => x.OwnerId);
             e.HasMany(x => x.Days).WithOne().HasForeignKey(x => x.HabitId).OnDelete(DeleteBehavior.Cascade);
         });
 
@@ -95,6 +101,14 @@ public sealed class RoseDbContext(DbContextOptions<RoseDbContext> options) : DbC
         {
             e.ToTable("habit_days");
             e.HasKey(x => new { x.HabitId, x.Date });
+        });
+
+        modelBuilder.Entity<UserRow>(e =>
+        {
+            e.ToTable("users");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).ValueGeneratedNever();
+            e.HasIndex(x => x.Email).IsUnique();
         });
 
         modelBuilder.Entity<AppSecretRow>(e =>

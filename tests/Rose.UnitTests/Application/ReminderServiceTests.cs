@@ -17,7 +17,7 @@ public sealed class ReminderServiceTests : IDisposable
     public void Dispose() => _service.Dispose();
 
     private Task<Reminder> CreateIn(TimeSpan delay, string repeat = RepeatRule.None) =>
-        _service.CreateAsync(new ReminderRequest("Pay rent", (Start + delay).ToString("O"), repeat, null));
+        _service.CreateAsync(TestUsers.Alice, new ReminderRequest("Pay rent", (Start + delay).ToString("O"), repeat, null));
 
     [Fact]
     public async Task Create_saves_and_lists_soonest_first()
@@ -25,7 +25,7 @@ public sealed class ReminderServiceTests : IDisposable
         await CreateIn(TimeSpan.FromHours(2));
         var sooner = await CreateIn(TimeSpan.FromHours(1));
 
-        Assert.Equal(sooner.Id, (await _service.ListAsync())[0].Id);
+        Assert.Equal(sooner.Id, (await _service.ListAsync(TestUsers.Alice))[0].Id);
         Assert.Equal(2, _repo.Stored.Count);
     }
 
@@ -34,9 +34,9 @@ public sealed class ReminderServiceTests : IDisposable
     {
         await CreateIn(TimeSpan.FromHours(1));
 
-        (await _service.ListAsync())[0].Text = "hacked";
+        (await _service.ListAsync(TestUsers.Alice))[0].Text = "hacked";
 
-        Assert.Equal("Pay rent", (await _service.ListAsync())[0].Text);
+        Assert.Equal("Pay rent", (await _service.ListAsync(TestUsers.Alice))[0].Text);
     }
 
     [Fact]
@@ -45,12 +45,12 @@ public sealed class ReminderServiceTests : IDisposable
         await CreateIn(TimeSpan.FromMinutes(1));
 
         _clock.Advance(TimeSpan.FromMinutes(2));
-        var fired = await _service.TickAsync();
-        var again = await _service.TickAsync();
+        var fired = await _service.TickAsync(TestUsers.Alice);
+        var again = await _service.TickAsync(TestUsers.Alice);
 
         Assert.Single(fired);
         Assert.Empty(again);
-        Assert.True((await _service.ListAsync())[0].Ringing);
+        Assert.True((await _service.ListAsync(TestUsers.Alice))[0].Ringing);
     }
 
     [Fact]
@@ -58,14 +58,14 @@ public sealed class ReminderServiceTests : IDisposable
     {
         var reminder = await CreateIn(TimeSpan.FromMinutes(1));
         _clock.Advance(TimeSpan.FromMinutes(2));
-        await _service.TickAsync();
+        await _service.TickAsync(TestUsers.Alice);
 
-        var snoozed = await _service.SnoozeAsync(reminder.Id, null);
+        var snoozed = await _service.SnoozeAsync(TestUsers.Alice, reminder.Id, null);
         Assert.False(snoozed.Ringing);
         Assert.Equal(_clock.Now.AddMinutes(10), snoozed.SnoozedUntil);
 
         _clock.Advance(TimeSpan.FromMinutes(11));
-        Assert.Single(await _service.TickAsync());
+        Assert.Single(await _service.TickAsync(TestUsers.Alice));
     }
 
     [Theory]
@@ -75,7 +75,7 @@ public sealed class ReminderServiceTests : IDisposable
     {
         var reminder = await CreateIn(TimeSpan.FromMinutes(1));
 
-        var error = await Assert.ThrowsAsync<ValidationException>(() => _service.SnoozeAsync(reminder.Id, minutes));
+        var error = await Assert.ThrowsAsync<ValidationException>(() => _service.SnoozeAsync(TestUsers.Alice, reminder.Id, minutes));
         Assert.Equal("Snooze between 1 minute and 24 hours.", error.Message);
     }
 
@@ -85,8 +85,8 @@ public sealed class ReminderServiceTests : IDisposable
         var once = await CreateIn(TimeSpan.FromMinutes(1));
         var daily = await CreateIn(TimeSpan.FromMinutes(1), RepeatRule.Daily);
 
-        Assert.True((await _service.CompleteAsync(once.Id)).Done);
-        Assert.False((await _service.CompleteAsync(daily.Id)).Done);
+        Assert.True((await _service.CompleteAsync(TestUsers.Alice, once.Id)).Done);
+        Assert.False((await _service.CompleteAsync(TestUsers.Alice, daily.Id)).Done);
     }
 
     [Fact]
@@ -94,19 +94,47 @@ public sealed class ReminderServiceTests : IDisposable
     {
         var reminder = await CreateIn(TimeSpan.FromMinutes(1));
         _clock.Advance(TimeSpan.FromMinutes(2));
-        await _service.TickAsync();
+        await _service.TickAsync(TestUsers.Alice);
 
-        await _service.UpdateAsync(reminder.Id, new ReminderRequest("Pay rent", _clock.Now.AddMinutes(5).ToString("O"), "none", null));
+        await _service.UpdateAsync(TestUsers.Alice, reminder.Id, new ReminderRequest("Pay rent", _clock.Now.AddMinutes(5).ToString("O"), "none", null));
         _clock.Advance(TimeSpan.FromMinutes(6));
 
-        Assert.Single(await _service.TickAsync());
+        Assert.Single(await _service.TickAsync(TestUsers.Alice));
     }
 
     [Fact]
     public async Task Unknown_ids_are_reported()
     {
-        var error = await Assert.ThrowsAsync<NotFoundException>(() => _service.RemoveAsync("nope"));
+        var error = await Assert.ThrowsAsync<NotFoundException>(() => _service.RemoveAsync(TestUsers.Alice, "nope"));
         Assert.Equal("That reminder no longer exists.", error.Message);
+    }
+
+    [Fact]
+    public async Task Each_user_sees_only_their_own_reminders()
+    {
+        var alices = await CreateIn(TimeSpan.FromMinutes(1));
+
+        Assert.Empty(await _service.ListAsync(TestUsers.Bob));
+        await Assert.ThrowsAsync<NotFoundException>(() => _service.SnoozeAsync(TestUsers.Bob, alices.Id, null));
+        await Assert.ThrowsAsync<NotFoundException>(() => _service.RemoveAsync(TestUsers.Bob, alices.Id));
+
+        _clock.Advance(TimeSpan.FromMinutes(2));
+        Assert.Empty(await _service.TickAsync(TestUsers.Bob));
+        Assert.Single(await _service.TickAsync(TestUsers.Alice));
+        Assert.Empty(_repo.StoredFor(TestUsers.Bob));
+    }
+
+    [Fact]
+    public async Task A_ring_after_a_snooze_is_marked_as_one()
+    {
+        var reminder = await CreateIn(TimeSpan.FromMinutes(1));
+        _clock.Advance(TimeSpan.FromMinutes(2));
+        Assert.False(Assert.Single(await _service.TickAsync(TestUsers.Alice)).IsSnoozeRing);
+
+        await _service.SnoozeAsync(TestUsers.Alice, reminder.Id, 5);
+        _clock.Advance(TimeSpan.FromMinutes(6));
+
+        Assert.True(Assert.Single(await _service.TickAsync(TestUsers.Alice)).IsSnoozeRing);
     }
 
     [Fact]
@@ -116,21 +144,21 @@ public sealed class ReminderServiceTests : IDisposable
         using var failing = new ReminderService(new FailingRepository(_repo), _clock);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            failing.UpdateAsync(reminder.Id, new ReminderRequest("Changed", Start.AddHours(3).ToString("O"), "none", null)));
+            failing.UpdateAsync(TestUsers.Alice, reminder.Id, new ReminderRequest("Changed", Start.AddHours(3).ToString("O"), "none", null)));
 
-        Assert.Equal("Pay rent", (await failing.ListAsync())[0].Text);
+        Assert.Equal("Pay rent", (await failing.ListAsync(TestUsers.Alice))[0].Text);
     }
 
     /// <summary>Reads work, every write fails - like a database that went away mid-request.</summary>
     private sealed class FailingRepository(MemoryRepository<Reminder> inner) : Rose.Application.Abstractions.IRepository<Reminder>
     {
-        public async Task<List<Reminder>> LoadAllAsync(CancellationToken cancellationToken = default) =>
-            [.. (await inner.LoadAllAsync(cancellationToken)).Select(r => r.Copy())];
+        public async Task<List<Reminder>> LoadAllAsync(Guid owner, CancellationToken cancellationToken = default) =>
+            [.. (await inner.LoadAllAsync(owner, cancellationToken)).Select(r => r.Copy())];
 
-        public Task SaveAsync(IReadOnlyCollection<Reminder> items, CancellationToken cancellationToken = default) =>
+        public Task SaveAsync(Guid owner, IReadOnlyCollection<Reminder> items, CancellationToken cancellationToken = default) =>
             throw new InvalidOperationException("database down");
 
-        public Task DeleteAsync(string id, CancellationToken cancellationToken = default) =>
+        public Task DeleteAsync(Guid owner, string id, CancellationToken cancellationToken = default) =>
             throw new InvalidOperationException("database down");
     }
 }

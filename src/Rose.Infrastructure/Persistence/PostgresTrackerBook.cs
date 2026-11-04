@@ -9,10 +9,10 @@ namespace Rose.Infrastructure.Persistence;
 /// <summary>
 /// A unit of work over the tracker tables: rows are loaded once, changed in memory (tracked by
 /// EF Core) and written in one transaction by <see cref="SaveAsync"/>. Disposing without saving
-/// discards every change. The reads apply the same clean-up rules the Excel version did.
+/// discards every change. Holds one user's rows; new rows are stamped with that owner. The reads apply the same clean-up rules the Excel version did.
 /// </summary>
 internal sealed class PostgresTrackerBook(
-    RoseDbContext db, List<AccountRow> accounts, List<PaymentRow> payments, List<BudgetLineRow> lines, Action release)
+    RoseDbContext db, Guid owner, List<AccountRow> accounts, List<PaymentRow> payments, List<BudgetLineRow> lines, Action release)
     : ITrackerWorkbook
 {
     private bool disposed;
@@ -55,6 +55,7 @@ internal sealed class PostgresTrackerBook(
     {
         var row = new AccountRow
         {
+            OwnerId = owner,
             Title = account.Title.Trim(),
             TotalAmount = account.TotalAmount,
             StartDate = Mappers.Date(account.StartDate),
@@ -70,7 +71,7 @@ internal sealed class PostgresTrackerBook(
 
     public void AddPayment(Payment payment)
     {
-        var row = new PaymentRow { Id = payment.Id };
+        var row = new PaymentRow { Id = payment.Id, OwnerId = owner };
         Write(row, payment);
         db.Payments.Add(row);
         payments.Add(row);
@@ -130,6 +131,7 @@ internal sealed class PostgresTrackerBook(
     {
         var row = new BudgetLineRow
         {
+            OwnerId = owner,
             Id = line.Id,
             Year = line.Year,
             Section = line.Section.Trim(),

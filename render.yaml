@@ -17,5 +17,11 @@ services:
         sync: false
       - key: Supabase__PublishableKey
         sync: false
-      - key: Supabase__AllowedEmails__0
+      - key: Supabase__SecretKey
+        sync: false
+      - key: Access__AdminEmails__0
+        sync: false
+      - key: Email__BrevoApiKey
+        sync: false
+      - key: Email__FromAddress
         sync: false

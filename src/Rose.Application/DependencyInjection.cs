@@ -2,9 +2,11 @@ using Microsoft.Extensions.DependencyInjection;
 using Rose.Application.Abstractions;
 using Rose.Application.Habits;
 using Rose.Application.Importing;
+using Rose.Application.Notifications;
 using Rose.Application.Reminders;
 using Rose.Application.Savings;
 using Rose.Application.Tracker;
+using Rose.Application.Users;
 
 namespace Rose.Application;
 
@@ -17,11 +19,17 @@ public static class DependencyInjection
         services.AddScoped<ReportService>();
         services.AddScoped<ImportService>();
 
-        // Reminders, savings and habits live in memory, so there is exactly one of each.
+        // Reminders, savings and habits are cached in memory (one partition per user), so there is exactly one of each.
         services.AddSingleton<ReminderService>();
         services.AddSingleton<PushService>();
         services.AddSingleton<SavingsService>();
         services.AddSingleton<HabitService>();
+        foreach (var cache in new[] { typeof(ReminderService), typeof(PushService), typeof(SavingsService), typeof(HabitService) })
+        {
+            services.AddSingleton(typeof(IUserScopedCache), sp => sp.GetRequiredService(cache));
+        }
+        services.AddSingleton<UserService>();
+        services.AddSingleton<EmailNotifier>();
 
         // The background scheduler runs every IScheduledJob; each is also resolvable on its own.
         services.AddSingleton<ReminderRinger>();

@@ -7,21 +7,22 @@ namespace Rose.Application.Reminders;
 
 /// <summary>
 /// All the rules for changing reminders. A singleton: the scheduler and HTTP requests share one
-/// cache, and every method holds it exclusively while it reads or changes a reminder.
+/// cache, and every method holds one user's reminders exclusively while it reads or changes them.
+/// Every method names the <c>owner</c>: the signed-in user, or the user the scheduler is ringing for.
 /// </summary>
-public sealed class ReminderService(IRepository<Reminder> repository, TimeProvider clock) : IDisposable
+public sealed class ReminderService(IRepository<Reminder> repository, TimeProvider clock) : IDisposable, IUserScopedCache
 {
     private readonly RepositoryCache<Reminder> cache = new(repository);
 
     public TimeZoneInfo Zone => clock.LocalTimeZone;
 
-    public async Task<IReadOnlyList<Reminder>> ListAsync(CancellationToken ct = default)
+    public async Task<IReadOnlyList<Reminder>> ListAsync(Guid owner, CancellationToken ct = default)
     {
-        using var session = await cache.OpenAsync(ct);
+        using var session = await cache.OpenAsync(owner, ct);
         return [.. session.Items.OrderBy(r => r.DueAt).Select(r => r.Copy())];
     }
 
-    public async Task<Reminder> CreateAsync(ReminderRequest request, CancellationToken ct = default)
+    public async Task<Reminder> CreateAsync(Guid owner, ReminderRequest request, CancellationToken ct = default)
     {
         var input = Parse(request);
         var now = Now();
@@ -35,16 +36,16 @@ public sealed class ReminderService(IRepository<Reminder> repository, TimeProvid
             CreatedAt = now,
             UpdatedAt = now,
         };
-        using var session = await cache.OpenAsync(ct);
+        using var session = await cache.OpenAsync(owner, ct);
         session.Items.Add(reminder);
         await session.SaveAsync(reminder, ct);
         return reminder.Copy();
     }
 
-    public Task<Reminder> UpdateAsync(string id, ReminderRequest request, CancellationToken ct = default)
+    public Task<Reminder> UpdateAsync(Guid owner, string id, ReminderRequest request, CancellationToken ct = default)
     {
         var input = Parse(request);
-        return ChangeAsync(id, reminder =>
+        return ChangeAsync(owner, id, reminder =>
         {
             var timeChanged = reminder.DueAt != input.DueAt || reminder.Repeat != input.Repeat;
             reminder.Text = input.Text;
@@ -62,44 +63,47 @@ public sealed class ReminderService(IRepository<Reminder> repository, TimeProvid
         }, ct);
     }
 
-    public async Task RemoveAsync(string id, CancellationToken ct = default)
+    public async Task RemoveAsync(Guid owner, string id, CancellationToken ct = default)
     {
-        using var session = await cache.OpenAsync(ct);
+        using var session = await cache.OpenAsync(owner, ct);
         var reminder = Get(session, id);
         await session.DeleteAsync(reminder.Id, ct);
         session.Items.Remove(reminder);
     }
 
     /// <summary>One-off: mark done. Repeating: just silence this ring; it keeps its schedule.</summary>
-    public Task<Reminder> CompleteAsync(string id, CancellationToken ct = default) => ChangeAsync(id, r =>
+    public Task<Reminder> CompleteAsync(Guid owner, string id, CancellationToken ct = default) => ChangeAsync(owner, id, r =>
     {
         Silence(r);
         if (r.Repeat == RepeatRule.None) r.Done = true;
     }, ct);
 
     /// <summary>Silence it (and cancel any snooze) without finishing: it stays overdue / on its schedule.</summary>
-    public Task<Reminder> DismissAsync(string id, CancellationToken ct = default) => ChangeAsync(id, Silence, ct);
+    public Task<Reminder> DismissAsync(Guid owner, string id, CancellationToken ct = default) => ChangeAsync(owner, id, Silence, ct);
 
-    public Task<Reminder> SnoozeAsync(string id, double? minutes, CancellationToken ct = default)
+    public Task<Reminder> SnoozeAsync(Guid owner, string id, double? minutes, CancellationToken ct = default)
     {
         var value = minutes ?? 10;
         if (!double.IsFinite(value) || value < 1 || value > 24 * 60)
             throw new ValidationException("Snooze between 1 minute and 24 hours.");
-        return ChangeAsync(id, r =>
+        return ChangeAsync(owner, id, r =>
         {
             r.Ringing = false;
             r.SnoozedUntil = ReminderRules.TruncateToMilliseconds(Now().AddMinutes(value));
         }, ct);
     }
 
-    /// <summary>Called by the scheduler. Returns what must ring now (and saves the new state).</summary>
-    public async Task<IReadOnlyList<Reminder>> TickAsync(CancellationToken ct = default)
+    /// <summary>Called by the scheduler for each user. Returns what must ring now (and saves the new state).</summary>
+    public async Task<IReadOnlyList<ReminderRing>> TickAsync(Guid owner, CancellationToken ct = default)
     {
-        using var session = await cache.OpenAsync(ct);
+        using var session = await cache.OpenAsync(owner, ct);
         var fired = ReminderRules.CollectDue(session.Items, Now(), Zone);
-        if (fired.Count > 0) await session.SaveAsync(fired, ct);
-        return [.. fired.Select(r => r.Copy())];
+        if (fired.Count > 0) await session.SaveAsync([.. fired.Select(f => f.Reminder)], ct);
+        return [.. fired.Select(f => f with { Reminder = f.Reminder.Copy() })];
     }
+
+    /// <summary>Forgets a deleted user's cached reminders.</summary>
+    public void Forget(Guid owner) => cache.Forget(owner);
 
     public void Dispose() => cache.Dispose();
 
@@ -115,9 +119,9 @@ public sealed class ReminderService(IRepository<Reminder> repository, TimeProvid
     private static Reminder Get(RepositoryCache<Reminder>.Session session, string id) =>
         session.Items.Find(r => r.Id == id) ?? throw new NotFoundException("That reminder no longer exists.");
 
-    private async Task<Reminder> ChangeAsync(string id, Action<Reminder> change, CancellationToken ct)
+    private async Task<Reminder> ChangeAsync(Guid owner, string id, Action<Reminder> change, CancellationToken ct)
     {
-        using var session = await cache.OpenAsync(ct);
+        using var session = await cache.OpenAsync(owner, ct);
         var reminder = Get(session, id);
         change(reminder);
         reminder.UpdatedAt = Now();

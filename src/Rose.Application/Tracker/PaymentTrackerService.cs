@@ -8,11 +8,11 @@ using Rose.Domain.Tracker;
 namespace Rose.Application.Tracker;
 
 /// <summary>Titles (instalment plans) and their payments.</summary>
-public sealed class PaymentTrackerService(ITrackerWorkbookStore store, TimeProvider clock)
+public sealed class PaymentTrackerService(ITrackerWorkbookStore store, ICurrentUser user, TimeProvider clock)
 {
     public async Task<HomeStats> HomeStatsAsync(CancellationToken ct = default)
     {
-        using var book = await store.OpenAsync(ct);
+        using var book = await store.OpenAsync(user.Id, ct);
         var accounts = book.Accounts();
         var payments = book.Payments();
         var today = clock.Today();
@@ -39,7 +39,7 @@ public sealed class PaymentTrackerService(ITrackerWorkbookStore store, TimeProvi
 
     public async Task<IReadOnlyList<Account>> AccountsAsync(CancellationToken ct = default)
     {
-        using var book = await store.OpenAsync(ct);
+        using var book = await store.OpenAsync(user.Id, ct);
         return book.Accounts();
     }
 
@@ -51,7 +51,7 @@ public sealed class PaymentTrackerService(ITrackerWorkbookStore store, TimeProvi
         var amount = request.Amount ?? request.TotalAmount;
         var frequency = string.IsNullOrEmpty(request.Frequency) ? "Monthly" : request.Frequency;
 
-        using var book = await store.OpenAsync(ct);
+        using var book = await store.OpenAsync(user.Id, ct);
         if (string.IsNullOrEmpty(request.Instalments))
         {
             EnsureNewTitle(book, title);
@@ -94,7 +94,7 @@ public sealed class PaymentTrackerService(ITrackerWorkbookStore store, TimeProvi
 
     public async Task<AccountSummary> SummaryAsync(string title, CancellationToken ct = default)
     {
-        using var book = await store.OpenAsync(ct);
+        using var book = await store.OpenAsync(user.Id, ct);
         return AccountSummary.For(title, book.Accounts(), book.Payments(), clock.Today());
     }
 
@@ -114,7 +114,7 @@ public sealed class PaymentTrackerService(ITrackerWorkbookStore store, TimeProvi
             Coerce.Iso(request.DueDate),
             request.Note ?? "");
 
-        using var book = await store.OpenAsync(ct);
+        using var book = await store.OpenAsync(user.Id, ct);
         var instalment = FindUnpaidInstalment(book.Payments(), payment);
         if (instalment is null)
         {
@@ -146,7 +146,7 @@ public sealed class PaymentTrackerService(ITrackerWorkbookStore store, TimeProvi
     {
         if (!PaymentStatus.IsKnown(request.Status))
             throw new ValidationException("status must be one of ['Paid', 'Unpaid']");
-        using var book = await store.OpenAsync(ct);
+        using var book = await store.OpenAsync(user.Id, ct);
         if (!book.SetPaymentStatus(id, request.Status!)) throw new NotFoundException("Payment not found.");
         await book.SaveAsync(ct);
         return new PaymentUpdated(true, AccountSummary.For(request.Title ?? "", book.Accounts(), book.Payments(), clock.Today()));
@@ -154,7 +154,7 @@ public sealed class PaymentTrackerService(ITrackerWorkbookStore store, TimeProvi
 
     public async Task DeletePaymentAsync(string id, CancellationToken ct = default)
     {
-        using var book = await store.OpenAsync(ct);
+        using var book = await store.OpenAsync(user.Id, ct);
         if (!book.DeletePayment(id)) throw new NotFoundException("Payment not found.");
         await book.SaveAsync(ct);
     }
@@ -162,7 +162,7 @@ public sealed class PaymentTrackerService(ITrackerWorkbookStore store, TimeProvi
     /// <summary>Deletes a title and every payment recorded under it, in one save.</summary>
     public async Task<AccountDeleted> DeleteAccountAsync(string title, CancellationToken ct = default)
     {
-        using var book = await store.OpenAsync(ct);
+        using var book = await store.OpenAsync(user.Id, ct);
         var removed = book.DeleteAccount(title) ?? throw new NotFoundException("Title not found.");
         await book.SaveAsync(ct);
         return new AccountDeleted(true, removed, book.Accounts());

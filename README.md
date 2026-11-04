@@ -9,6 +9,7 @@ Browser / installed PWA ??HTTPS??> Render (free, Singapore): Docker container
                                      ?? React app (wwwroot)
                                      ?? Rose.Api ??> Supabase Postgres (free, Singapore)
 Supabase Auth: email + password -> access token (JWT) -> checked by Rose.Api on every request
+Brevo: reminder and habit emails (HTTPS API; Render's free plan blocks SMTP)
 cron-job.org: GET /health every 10 minutes (keeps Render and Supabase awake)
 GitHub Actions: weekly encrypted pg_dump into a private repo
 ```
@@ -24,7 +25,7 @@ src/
   Rose.Application     use cases (services) + interfaces (IRepository<T>, ITrackerWorkbookStore...)
   Rose.Infrastructure  Persistence/ (EF Core + Npgsql: RoseDbContext, repositories, migrations),
                        Excel/ (ClosedXML export/import), Importing/ (CSV/XLSX), Reminders/ (Web Push)
-  Rose.Api             controllers, Supabase JWT auth + email allow-list, Swagger (Development),
+  Rose.Api             controllers, Supabase JWT auth + ROSE accounts (admin page), Swagger (Development),
                        the background scheduler (reminders, habit nudges), static React app
 tests/
   Rose.UnitTests            domain + services (in-memory fakes)
@@ -46,7 +47,9 @@ Prerequisites: the [.NET 9 SDK](https://dotnet.microsoft.com/download/dotnet/9.0
    ```
 2. **Point the API at your Supabase project** (login still goes through Supabase): copy
    `src/Rose.Api/appsettings.Local.example.json` to `src/Rose.Api/appsettings.Local.json`
-   (git-ignored) and fill in the URL, publishable key and your email.
+   (git-ignored) and fill in the URL, publishable key and your email (as admin). The secret key
+   and Brevo settings are optional locally: without them adding accounts answers 503 and no
+   emails are sent.
 3. **Start the API:**
    ```powershell
    dotnet run --project src/Rose.Api
@@ -81,7 +84,11 @@ user-secrets, then **environment variables** (`__` = `:`, e.g. `Supabase__Url`) 
 | `ConnectionStrings:Rose` | `localhost:5433` in Development | Postgres connection string (*required*) |
 | `Supabase:Url` | *(required)* | `https://<project-ref>.supabase.co` |
 | `Supabase:PublishableKey` | | Public key the React app signs in with (served by `GET /api/config`) |
-| `Supabase:AllowedEmails` | `[]` | Accounts allowed to use ROSE (case-insensitive). Empty = nobody |
+| `Supabase:SecretKey` | | `sb_secret_...` key; lets the admin page create, reset and delete Supabase logins. **Secret** |
+| `Access:AdminEmails` | *(required, 1+)* | Admins: manage accounts on the Users page. The first admin sign-in takes over data from before accounts existed |
+| `Email:BrevoApiKey` | | Brevo API key. Empty = no emails |
+| `Email:FromAddress` / `Email:FromName` | / `ROSE` | Sender (must be a verified sender in Brevo) |
+| `Email:AppUrl` | `RENDER_EXTERNAL_URL` | Link put in emails |
 | `Supabase:JwtSecret` | | Only for legacy HS256 projects; new projects use the JWKS public keys |
 | `Reminders:SchedulerEnabled` | `true` | Ring reminders and send habit nudges in the background |
 | `Reminders:TickInterval` | `00:00:15` | How often due reminders and habit nudges are checked |
@@ -92,7 +99,12 @@ user-secrets, then **environment variables** (`__` = `:`, e.g. `Supabase__Url`) 
 
 - Login is Supabase's job. The API only accepts Supabase access tokens: signature (JWKS),
   issuer, audience `authenticated`, expiry and `role=authenticated` are checked, then the
-  email must be on `Supabase:AllowedEmails` (otherwise 403).
+  token's user id must be a ROSE account (otherwise 403). Admins become accounts on first sign-in;
+  everybody else is added by an admin with a temporary password and gets 403 everywhere except
+  `/api/auth/*` until they choose their own.
+- **Every row has an `owner_id`** (the Supabase user id). Repositories and the tracker store
+  always filter by it, so one account can never read, change or download another's data.
+  Removing an account deletes its login and all of its data in one transaction.
 - Anonymous endpoints: `/health` and `GET /api/config` (public URL + publishable key only).
 - Sign-ups should be disabled in Supabase (see the deploy guide), so nobody else can even get a token.
 - Row-level security locks the `rose` schema away from Supabase's Data API.
@@ -117,9 +129,10 @@ Test tokens are minted locally with a test-only HS256 secret.
 
 | Area | Endpoints |
 | --- | --- |
-| Auth | `GET /api/config` (public), `GET /api/auth/session` |
+| Auth | `GET /api/config` (public), `GET /api/auth/session`, `POST /api/auth/password` |
+| Admin | `/api/admin/users` `GET`, `POST`, `POST {id}/password`, `DELETE {id}` |
 | Payment Tracker | `/api/payment-tracker/` `accounts`, `summary/{title}`, `payments`, `budget`, `report/summary`, `import/*`, `download`, `home-stats` |
-| Reminders | `/api/reminders/` `status`, `items`, `items/{id}/complete\|dismiss\|snooze`, `push/key\|subscribe\|unsubscribe\|test` |
+| Reminders | `/api/reminders/` `status`, `items`, `items/{id}/complete\|dismiss\|snooze`, `push/key\|devices\|subscribe\|unsubscribe\|test` |
 | Savings Goals | `/api/savings/` `goals`, `goals/{id}`, `goals/{id}/entries`, `goals/{id}/entries/{entryId}` |
 | Habit Tracker | `/api/habits/` `items`, `items/{id}`, `PUT items/{id}/days/{yyyy-MM-dd}`, `items/{id}/nudge/complete\|dismiss\|snooze` |
 | Health | `GET /health` (includes a database check) |
@@ -139,7 +152,8 @@ The `Dockerfile` builds the React app from `chupipings1424/project-rose` (`UI_RE
    up** off.
 3. **Authentication -> Users -> Add user -> Create new user**: your email + a strong password,
    tick **Auto Confirm User**.
-4. **Project Settings -> API Keys**: copy the **Project URL** and the **publishable** key.
+4. **Project Settings -> API Keys**: copy the **Project URL**, the **publishable** key and a
+   **secret** key (`sb_secret_...`, never share it).
 5. **Connect** (top bar) -> **Session pooler** (IPv4) and build an Npgsql connection string:
    `Host=aws-0-ap-southeast-1.pooler.supabase.com;Port=5432;Database=postgres;Username=postgres.<project-ref>;Password=<db password>;SSL Mode=Require`
    (use the host shown on that page).
@@ -149,10 +163,27 @@ The `Dockerfile` builds the React app from `chupipings1424/project-rose` (`UI_RE
 1. Push the `main` branches of both repos.
 2. Sign up at <https://render.com> with GitHub -> **New -> Blueprint** -> pick `project-rose-api`.
    `render.yaml` creates the free Singapore web service and asks for:
-   `ConnectionStrings__Rose`, `Supabase__Url`, `Supabase__PublishableKey`, `Supabase__AllowedEmails__0`.
+   `ConnectionStrings__Rose`, `Supabase__Url`, `Supabase__PublishableKey`, `Supabase__SecretKey`,
+   `Access__AdminEmails__0` (your email), `Email__BrevoApiKey`, `Email__FromAddress`.
 3. Wait for the first deploy, then open `https://<service>.onrender.com/health` -> `Healthy`.
 4. **Settings -> Deploy Hook**: copy the URL into the UI repo as the Actions secret
    `RENDER_DEPLOY_HOOK`, so UI changes on `main` redeploy too (API pushes deploy automatically).
+
+### Emails (Brevo, free 300/day)
+
+1. Sign up at <https://www.brevo.com>, then **Senders, Domains & Dedicated IPs -> Senders ->
+   Add a sender** with your email and confirm the link they mail you.
+2. **SMTP & API -> API Keys -> Generate a new API key**; put it in `Email__BrevoApiKey` and the
+   sender in `Email__FromAddress`.
+3. Reminders and habit nudges are emailed on their first ring (not on snooze re-rings). Check
+   spam the first time and mark it *Not spam*.
+
+### Accounts
+
+Sign in once as the admin after deploying (that claims your existing data), then open
+**Users** in ROSE to add someone: give them the temporary password; they must choose their own
+on first sign-in. Push notifications only go to devices where *Enable notifications* was
+turned on.
 
 ### 3. cron-job.org (stay awake)
 

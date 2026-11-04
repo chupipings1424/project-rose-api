@@ -44,12 +44,14 @@ public sealed class AuthTests(RoseApiFactory factory) : IClassFixture<RoseApiFac
         var session = await (await client.GetAsync(Url("/api/auth/session"))).JsonAsync();
 
         Assert.True(session.GetProperty("authenticated").GetBoolean());
-        Assert.Equal(RoseApiFactory.AllowedEmail, session.GetProperty("email").GetString());
+        Assert.Equal(RoseApiFactory.AdminEmail, session.GetProperty("email").GetString());
+        Assert.True(session.GetProperty("is_admin").GetBoolean());
+        Assert.False(session.GetProperty("must_change_password").GetBoolean());
         Assert.True(session.GetProperty("expires_at").GetDateTimeOffset() > DateTimeOffset.UtcNow.AddMinutes(50));
     }
 
     [Fact]
-    public async Task Allowed_emails_match_case_insensitively()
+    public async Task Admin_emails_match_case_insensitively()
     {
         var client = factory.CreateClientWith(RoseApiFactory.Token(email: "ROSE@Example.com"));
 
@@ -57,7 +59,7 @@ public sealed class AuthTests(RoseApiFactory factory) : IClassFixture<RoseApiFac
     }
 
     [Fact]
-    public async Task Another_supabase_user_is_forbidden()
+    public async Task A_supabase_user_without_a_rose_account_is_forbidden()
     {
         var client = factory.CreateClientWith(RoseApiFactory.Token(email: "stranger@example.com"));
 

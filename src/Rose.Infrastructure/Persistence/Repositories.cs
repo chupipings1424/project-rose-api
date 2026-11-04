@@ -10,40 +10,61 @@ namespace Rose.Infrastructure.Persistence;
 /// <summary>
 /// The shared upsert logic: load the stored rows for the given ids (children included), insert
 /// what is new, copy values onto what exists, then save everything in one transaction.
+/// Every read and delete is filtered by owner, and every saved row is stamped with it.
 /// A short-lived DbContext per call keeps memory flat and avoids stale tracking.
 /// </summary>
 internal abstract class EfRepository<TDomain, TRow>(IDbContextFactory<RoseDbContext> contexts) : IRepository<TDomain>
     where TDomain : class
-    where TRow : class
+    where TRow : class, IOwnedRow
 {
-    public async Task<List<TDomain>> LoadAllAsync(CancellationToken cancellationToken = default)
+    public async Task<List<TDomain>> LoadAllAsync(Guid owner, CancellationToken cancellationToken = default)
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken);
-        var rows = await Query(db).AsNoTracking().ToListAsync(cancellationToken);
+        var rows = await Query(db).Where(OwnedBy(owner)).AsNoTracking().ToListAsync(cancellationToken);
         return [.. rows.Select(ToDomain)];
     }
 
-    public async Task SaveAsync(IReadOnlyCollection<TDomain> items, CancellationToken cancellationToken = default)
+    public async Task SaveAsync(Guid owner, IReadOnlyCollection<TDomain> items, CancellationToken cancellationToken = default)
     {
         if (items.Count == 0) return;
         await using var db = await contexts.CreateDbContextAsync(cancellationToken);
         var ids = items.Select(IdOf).ToList();
+
+        // Looked up without the owner filter, so an id that belongs to someone else is noticed
+        // instead of failing as a duplicate key.
         var stored = await Query(db).Where(Within(ids)).ToDictionaryAsync(RowId, cancellationToken);
         foreach (var item in items)
         {
             var wanted = ToRow(item);
-            if (stored.TryGetValue(IdOf(item), out var row)) Update(db, row, wanted);
-            else db.Add(wanted);
+            wanted.OwnerId = owner;
+            if (stored.TryGetValue(IdOf(item), out var row))
+            {
+                if (row.OwnerId != owner && !CanChangeOwner)
+                    throw new InvalidOperationException($"{typeof(TRow).Name} {IdOf(item)} belongs to another user.");
+                Update(db, row, wanted);
+            }
+            else
+            {
+                db.Add(wanted);
+            }
         }
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task DeleteAsync(string id, CancellationToken cancellationToken = default)
+    public async Task DeleteAsync(Guid owner, string id, CancellationToken cancellationToken = default)
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken);
-        await db.Set<TRow>().Where(Within([id])).ExecuteDeleteAsync(cancellationToken);
+        await db.Set<TRow>().Where(Within([id])).Where(OwnedBy(owner)).ExecuteDeleteAsync(cancellationToken);
     }
 
+    /// <summary>
+    /// True when a row saved by another user simply moves to the saver (a phone that signs in
+    /// with a different account). Otherwise saving someone else's id is a bug and throws.
+    /// </summary>
+    protected virtual bool CanChangeOwner => false;
+
+    private static System.Linq.Expressions.Expression<Func<TRow, bool>> OwnedBy(Guid owner) =>
+        row => EF.Property<Guid>(row, nameof(IOwnedRow.OwnerId)) == owner;
     protected abstract IQueryable<TRow> Query(RoseDbContext db);
     protected abstract string IdOf(TDomain item);
     protected abstract string RowId(TRow row);
@@ -97,6 +118,9 @@ internal sealed class PushDeviceRepository(IDbContextFactory<RoseDbContext> cont
         d => ids.Contains(d.Endpoint);
     protected override PushDevice ToDomain(PushDeviceRow row) => Mappers.ToDomain(row);
     protected override PushDeviceRow ToRow(PushDevice item) => Mappers.ToRow(item);
+
+    // A browser has one endpoint; whoever subscribed it last gets its notifications.
+    protected override bool CanChangeOwner => true;
 }
 
 internal sealed class SavingsGoalRepository(IDbContextFactory<RoseDbContext> contexts) : EfRepository<SavingsGoal, SavingsGoalRow>(contexts)

@@ -16,7 +16,7 @@ public sealed class SavingsServiceTests : IDisposable
     public void Dispose() => _service.Dispose();
 
     private Task<SavingsGoalView> CreateLaptop() =>
-        _service.CreateAsync(new GoalRequest(" Laptop ", "\U0001F4BB", 50_000, "2027-06-30"));
+        _service.CreateAsync(TestUsers.Alice, new GoalRequest(" Laptop ", "\U0001F4BB", 50_000, "2027-06-30"));
 
     [Fact]
     public async Task Create_saves_a_clean_goal()
@@ -35,8 +35,8 @@ public sealed class SavingsServiceTests : IDisposable
     {
         var goal = await CreateLaptop();
 
-        await _service.AddEntryAsync(goal.Id, new EntryRequest("deposit", 1000, null, "Salary"));
-        var after = await _service.AddEntryAsync(goal.Id, new EntryRequest("withdraw", 250, null, null));
+        await _service.AddEntryAsync(TestUsers.Alice, goal.Id, new EntryRequest("deposit", 1000, null, "Salary"));
+        var after = await _service.AddEntryAsync(TestUsers.Alice, goal.Id, new EntryRequest("withdraw", 250, null, null));
 
         Assert.Equal(750m, after.Saved);
         Assert.Equal(2, after.Entries.Count);
@@ -47,22 +47,22 @@ public sealed class SavingsServiceTests : IDisposable
     public async Task Removing_a_deposit_may_not_leave_a_negative_balance()
     {
         var goal = await CreateLaptop();
-        var deposit = (await _service.AddEntryAsync(goal.Id, new EntryRequest("deposit", 100, "2026-11-01", null))).Entries[0];
-        var withdrawal = (await _service.AddEntryAsync(goal.Id, new EntryRequest("withdraw", 60, null, null))).Entries[0];
+        var deposit = (await _service.AddEntryAsync(TestUsers.Alice, goal.Id, new EntryRequest("deposit", 100, "2026-11-01", null))).Entries[0];
+        var withdrawal = (await _service.AddEntryAsync(TestUsers.Alice, goal.Id, new EntryRequest("withdraw", 60, null, null))).Entries[0];
 
-        await Assert.ThrowsAsync<ValidationException>(() => _service.RemoveEntryAsync(goal.Id, deposit.Id));
+        await Assert.ThrowsAsync<ValidationException>(() => _service.RemoveEntryAsync(TestUsers.Alice, goal.Id, deposit.Id));
 
-        await _service.RemoveEntryAsync(goal.Id, withdrawal.Id);
-        Assert.Equal(0m, (await _service.RemoveEntryAsync(goal.Id, deposit.Id)).Saved);
+        await _service.RemoveEntryAsync(TestUsers.Alice, goal.Id, withdrawal.Id);
+        Assert.Equal(0m, (await _service.RemoveEntryAsync(TestUsers.Alice, goal.Id, deposit.Id)).Saved);
     }
 
     [Fact]
     public async Task Update_keeps_the_history()
     {
         var goal = await CreateLaptop();
-        await _service.AddEntryAsync(goal.Id, new EntryRequest(null, 500, null, null));
+        await _service.AddEntryAsync(TestUsers.Alice, goal.Id, new EntryRequest(null, 500, null, null));
 
-        var updated = await _service.UpdateAsync(goal.Id, new GoalRequest("Gaming laptop", "", 400, null));
+        var updated = await _service.UpdateAsync(TestUsers.Alice, goal.Id, new GoalRequest("Gaming laptop", "", 400, null));
 
         Assert.Equal(GoalStatus.Done, updated.Status);
         Assert.Single(updated.Entries);
@@ -72,9 +72,9 @@ public sealed class SavingsServiceTests : IDisposable
     public async Task Unknown_ids_are_reported()
     {
         Assert.Equal("That goal no longer exists.",
-            (await Assert.ThrowsAsync<NotFoundException>(() => _service.RemoveAsync("nope"))).Message);
+            (await Assert.ThrowsAsync<NotFoundException>(() => _service.RemoveAsync(TestUsers.Alice, "nope"))).Message);
         var goal = await CreateLaptop();
         Assert.Equal("That entry no longer exists.",
-            (await Assert.ThrowsAsync<NotFoundException>(() => _service.RemoveEntryAsync(goal.Id, "nope"))).Message);
+            (await Assert.ThrowsAsync<NotFoundException>(() => _service.RemoveEntryAsync(TestUsers.Alice, goal.Id, "nope"))).Message);
     }
 }

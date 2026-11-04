@@ -40,3 +40,6 @@ public sealed record PushDevice(PushSubscriptionInfo Subscription, string Label,
 
 /// <summary>What the service worker shows. Same <see cref="Tag"/> = replaces the previous notification.</summary>
 public sealed record PushMessage(string Title, string Body, string Url, string Tag);
+
+/// <summary>One of the signed-in user's devices, for the notification settings list.</summary>
+public sealed record PushDeviceInfo(string Endpoint, string Label, DateTimeOffset CreatedAt);

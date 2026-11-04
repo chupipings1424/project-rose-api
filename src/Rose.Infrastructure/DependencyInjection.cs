@@ -4,10 +4,13 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Rose.Application.Abstractions;
+using Rose.Application.Notifications;
 using Rose.Application.Reminders;
 using Rose.Domain.Habits;
 using Rose.Domain.Reminders;
 using Rose.Domain.Savings;
+using Rose.Infrastructure.Accounts;
+using Rose.Infrastructure.Email;
 using Rose.Infrastructure.Importing;
 using Rose.Infrastructure.Persistence;
 using Rose.Infrastructure.Reminders;
@@ -25,6 +28,8 @@ public static class DependencyInjection
             .ValidateDataAnnotations()
             .ValidateOnStart();
         services.AddOptions<PushOptions>().Bind(configuration.GetSection(PushOptions.Section));
+        services.AddOptions<SupabaseAdminOptions>().Bind(configuration.GetSection(SupabaseAdminOptions.Section));
+        services.AddOptions<EmailOptions>().Bind(configuration.GetSection(EmailOptions.Section));
 
         var connectionString = configuration.GetConnectionString(ConnectionStringName);
         if (string.IsNullOrWhiteSpace(connectionString))
@@ -40,6 +45,8 @@ public static class DependencyInjection
 
         services.TryAddSingleton(TimeProvider.System);
         services.AddHttpClient(nameof(WebPushSender));
+        services.AddHttpClient(SupabaseAccountProvider.ClientName, c => c.Timeout = TimeSpan.FromSeconds(20));
+        services.AddHttpClient(BrevoEmailSender.ClientName, c => c.Timeout = TimeSpan.FromSeconds(20));
 
         services.AddSingleton<ITrackerWorkbookStore, PostgresTrackerStore>();
         services.AddSingleton<IUploadReader, UploadReader>();
@@ -47,6 +54,10 @@ public static class DependencyInjection
         services.AddSingleton<IRepository<PushDevice>, PushDeviceRepository>();
         services.AddSingleton<IRepository<SavingsGoal>, SavingsGoalRepository>();
         services.AddSingleton<IRepository<Habit>, HabitRepository>();
+        services.AddSingleton<IUserStore, PostgresUserStore>();
+        services.TryAddSingleton<IAccountProvider, SupabaseAccountProvider>();
+        services.TryAddSingleton<IEmailSender, BrevoEmailSender>();
+        services.AddSingleton(new PublicSite(PublicUrl(configuration)));
 
         services.AddSingleton(sp => VapidKeys.Resolve(
             sp.GetRequiredService<IOptions<PushOptions>>().Value,
@@ -54,5 +65,14 @@ public static class DependencyInjection
         services.AddSingleton<IPushSender, WebPushSender>();
 
         return services;
+    }
+
+    /// <summary>Email:AppUrl, else the address Render gives the service (RENDER_EXTERNAL_URL).</summary>
+    private static Uri? PublicUrl(IConfiguration configuration)
+    {
+        var url = configuration[$"{EmailOptions.Section}:{nameof(EmailOptions.AppUrl)}"] is { Length: > 0 } configured
+            ? configured
+            : configuration["RENDER_EXTERNAL_URL"];
+        return Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme is "https" or "http" ? uri : null;
     }
 }

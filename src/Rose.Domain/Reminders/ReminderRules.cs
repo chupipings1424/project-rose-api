@@ -54,33 +54,34 @@ public static class ReminderRules
     }
 
     /// <summary>One scheduler step: returns what must ring now and updates those reminders in place.</summary>
-    public static List<Reminder> CollectDue(IEnumerable<Reminder> reminders, DateTimeOffset now, TimeZoneInfo zone)
+    public static List<ReminderRing> CollectDue(IEnumerable<Reminder> reminders, DateTimeOffset now, TimeZoneInfo zone)
     {
-        var fired = new List<Reminder>();
+        var fired = new List<ReminderRing>();
         foreach (var reminder in reminders)
         {
             if (reminder.Done) continue;
-            var ring = false;
+            var snoozeEnded = false;
+            var due = false;
 
             if (reminder.SnoozedUntil is { } snoozed && snoozed <= now)
             {
                 reminder.SnoozedUntil = null;
-                ring = true;
+                snoozeEnded = true;
             }
 
             if (reminder.DueAt <= now && reminder.FiredFor != reminder.DueAt)
             {
-                ring = true;
+                due = true;
                 if (NextOccurrence(reminder, now, zone) is { } next) reminder.DueAt = next;
                 else reminder.FiredFor = reminder.DueAt;
             }
 
-            if (ring)
+            if (due || snoozeEnded)
             {
                 reminder.Ringing = true;
                 reminder.LastFiredAt = now;
                 reminder.UpdatedAt = now;
-                fired.Add(reminder);
+                fired.Add(new ReminderRing(reminder, IsSnoozeRing: !due));
             }
         }
         return fired;
