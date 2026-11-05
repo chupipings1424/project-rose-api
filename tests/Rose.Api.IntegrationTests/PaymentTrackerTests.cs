@@ -169,6 +169,61 @@ public sealed class PaymentTrackerTests(RoseApiFactory factory) : IClassFixture<
         Assert.Equal(1247, summary.GetProperty("total_paid").GetDouble());
     }
 
+    [Fact]
+    public async Task Paid_payments_flow_into_the_budget_and_back_out()
+    {
+        var client = await factory.CreateAuthenticatedClientAsync();
+        var title = "Sync " + Guid.NewGuid().ToString("N")[..6];
+        await client.PostAsJsonAsync(Url("accounts"), new { title, total_amount = 1000 });
+
+        await client.PostAsJsonAsync(Url("payments"), new { title, amount = 100, date = "2033-03-10", status = "Paid" });
+        var second = await (await client.PostAsJsonAsync(Url("payments"), new { title, amount = 50, date = "2033-03-20", status = "Paid" })).JsonAsync();
+        var line = await BudgetLineAsync(client, 2033, title);
+        Assert.Equal("Loans", line.Group);
+        Assert.Equal(150, line.Amounts[2]);
+
+        var id = second.GetProperty("id").GetString();
+        await client.PatchAsJsonAsync(Url($"payments/{id}"), new { status = "Unpaid", title });
+        Assert.Equal(100, (await BudgetLineAsync(client, 2033, title)).Amounts[2]);
+
+        await client.DeleteAsync(Url($"accounts/{Uri.EscapeDataString(title)}"));
+        Assert.Equal(0, (await BudgetLineAsync(client, 2033, title)).Amounts[2]);
+
+        Assert.Equal(HttpStatusCode.OK, (await client.DeleteAsync(Url("budget/years/2033"))).StatusCode);
+    }
+
+    [Fact]
+    public async Task Today_lists_soon_due_payments_and_the_month_budget()
+    {
+        var client = await factory.CreateAuthenticatedClientAsync();
+        var title = "Today " + Guid.NewGuid().ToString("N")[..6];
+        var due = DateOnly.FromDateTime(DateTime.Today.AddDays(2)).ToString("yyyy-MM-dd");
+        await client.PostAsJsonAsync(Url("accounts"), new { title, total_amount = 300 });
+        await client.PostAsJsonAsync(Url("payments"), new { title, amount = 75, date = due, status = "Unpaid", due_date = due });
+
+        var response = await client.GetAsync(new Uri("/api/today", UriKind.Relative));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var today = await response.JsonAsync();
+
+        var payment = today.GetProperty("payments").EnumerateArray().Single(p => p.GetProperty("title").GetString() == title);
+        Assert.Equal(75, payment.GetProperty("amount").GetDouble());
+        Assert.True(today.GetProperty("budget").TryGetProperty("left", out _));
+        Assert.Equal(JsonValueKind.Array, today.GetProperty("reminders").ValueKind);
+        Assert.Equal(JsonValueKind.Array, today.GetProperty("habits").ValueKind);
+
+        await client.DeleteAsync(Url($"accounts/{Uri.EscapeDataString(title)}"));
+    }
+
+    private static async Task<(string Group, double[] Amounts)> BudgetLineAsync(HttpClient client, int year, string item)
+    {
+        var budget = await (await client.GetAsync(Url($"budget?year={year}"))).JsonAsync();
+        var line = budget.GetProperty("sections").EnumerateArray()
+            .SelectMany(s => s.GetProperty("groups").EnumerateArray())
+            .SelectMany(g => g.GetProperty("lines").EnumerateArray())
+            .Single(l => l.GetProperty("item").GetString() == item);
+        return (line.GetProperty("group").GetString()!, [.. line.GetProperty("amounts").EnumerateArray().Select(a => a.GetDouble())]);
+    }
+
     private static MultipartFormDataContent Form(byte[] file, string? dryRun)
     {
         var form = new MultipartFormDataContent { { new ByteArrayContent(file), "file", "budget.csv" } };

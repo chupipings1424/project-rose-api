@@ -13,9 +13,10 @@ public sealed class PaymentTrackerService(ITrackerWorkbookStore store, ICurrentU
     public async Task<HomeStats> HomeStatsAsync(CancellationToken ct = default)
     {
         using var book = await store.OpenAsync(user.Id, ct);
+        var today = clock.Today();
+        await PaymentBudgetSync.SyncAsync(book, today, ct);
         var accounts = book.Accounts();
         var payments = book.Payments();
-        var today = clock.Today();
 
         double total = 0;
         int paidCount = 0, paymentCount = 0;
@@ -131,6 +132,7 @@ public sealed class PaymentTrackerService(ITrackerWorkbookStore store, ICurrentU
             };
             book.UpdatePayment(payment);
         }
+        PaymentBudgetSync.Reconcile(book, clock.Today());
         await book.SaveAsync(ct);
         return new PaymentCreated(
             payment.Id, instalment is not null, AccountSummary.For(title, book.Accounts(), book.Payments(), clock.Today()));
@@ -148,6 +150,7 @@ public sealed class PaymentTrackerService(ITrackerWorkbookStore store, ICurrentU
             throw new ValidationException("status must be one of ['Paid', 'Unpaid']");
         using var book = await store.OpenAsync(user.Id, ct);
         if (!book.SetPaymentStatus(id, request.Status!)) throw new NotFoundException("Payment not found.");
+        PaymentBudgetSync.Reconcile(book, clock.Today());
         await book.SaveAsync(ct);
         return new PaymentUpdated(true, AccountSummary.For(request.Title ?? "", book.Accounts(), book.Payments(), clock.Today()));
     }
@@ -155,15 +158,18 @@ public sealed class PaymentTrackerService(ITrackerWorkbookStore store, ICurrentU
     public async Task DeletePaymentAsync(string id, CancellationToken ct = default)
     {
         using var book = await store.OpenAsync(user.Id, ct);
+        PaymentBudgetSync.Release(book, book.Payments().Where(p => p.Id == id));
         if (!book.DeletePayment(id)) throw new NotFoundException("Payment not found.");
         await book.SaveAsync(ct);
     }
 
-    /// <summary>Deletes a title and every payment recorded under it, in one save.</summary>
+    /// <summary>Deletes a title and every payment recorded under it, in one save. Their amounts leave the budget too.</summary>
     public async Task<AccountDeleted> DeleteAccountAsync(string title, CancellationToken ct = default)
     {
         using var book = await store.OpenAsync(user.Id, ct);
-        var removed = book.DeleteAccount(title) ?? throw new NotFoundException("Title not found.");
+        // Not saved if the title is unknown (disposing discards it), so releasing first is safe.
+        PaymentBudgetSync.Release(book, book.Payments().Where(p => p.HasTitle((title ?? "").Trim())));
+        var removed = book.DeleteAccount(title!) ?? throw new NotFoundException("Title not found.");
         await book.SaveAsync(ct);
         return new AccountDeleted(true, removed, book.Accounts());
     }

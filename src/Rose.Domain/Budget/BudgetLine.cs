@@ -30,6 +30,9 @@ public static class BudgetRules
 
     public static readonly IReadOnlyList<string> Sections = [Revenue, Expense];
 
+    /// <summary>The Expense group new lines for paid Payment Tracker payments go into.</summary>
+    public const string LoansGroup = "Loans";
+
     public static readonly IReadOnlyDictionary<string, IReadOnlyList<string>> DefaultGroups =
         new Dictionary<string, IReadOnlyList<string>>
         {

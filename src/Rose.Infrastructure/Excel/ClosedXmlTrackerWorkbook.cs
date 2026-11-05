@@ -169,6 +169,9 @@ internal sealed class ClosedXmlTrackerWorkbook(XLWorkbook workbook, TimeProvider
         return true;
     }
 
+    /// <summary>The Excel export has no column for this: the exported budget sheet already holds the amounts.</summary>
+    public bool SetPaymentBudget(string id, BudgetMark? mark) => FindRow(PaymentsSheet, 1, id) is not null;
+
     public bool DeletePayment(string id)
     {
         if (FindRow(PaymentsSheet, 1, id) is not { } row) return false;

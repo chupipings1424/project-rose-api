@@ -11,6 +11,7 @@ public sealed class BudgetService(ITrackerWorkbookStore store, ICurrentUser user
     public async Task<BudgetView> GetAsync(string? year, CancellationToken ct = default)
     {
         using var book = await store.OpenAsync(user.Id, ct);
+        await PaymentBudgetSync.SyncAsync(book, clock.Today(), ct);
         return View(book, year);
     }
 

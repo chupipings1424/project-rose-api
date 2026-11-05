@@ -132,12 +132,27 @@ Test tokens are minted locally with a test-only HS256 secret.
 | Auth | `GET /api/config` (public), `GET /api/auth/session`, `POST /api/auth/password` |
 | Admin | `/api/admin/users` `GET`, `POST`, `POST {id}/password`, `DELETE {id}` |
 | Payment Tracker | `/api/payment-tracker/` `accounts`, `summary/{title}`, `payments`, `budget`, `report/summary`, `import/*`, `download`, `home-stats` |
+| Today | `GET /api/today`: unpaid payments due within 7 days (and overdue), today's reminders, habits, this month's budget |
 | Reminders | `/api/reminders/` `status`, `items`, `items/{id}/complete\|dismiss\|snooze`, `push/key\|devices\|subscribe\|unsubscribe\|test` |
 | Savings Goals | `/api/savings/` `goals`, `goals/{id}`, `goals/{id}/entries`, `goals/{id}/entries/{entryId}` |
 | Habit Tracker | `/api/habits/` `items`, `items/{id}`, `PUT items/{id}/days/{yyyy-MM-dd}`, `items/{id}/nudge/complete\|dismiss\|snooze` |
 | Health | `GET /health` (includes a database check) |
 
 `GET /api/payment-tracker/download` still gives you everything as an Excel workbook.
+
+### Paid payments -> budget
+
+`PaymentBudgetSync` (Application/Tracker) keeps the budget's **actual spending** in step
+with the Payment Tracker:
+
+- A **Paid** payment adds its amount to the Expense line whose item equals its title
+  (case-insensitive, *Loans* group preferred) in the month of its date (else due date). No
+  line? It creates one in **Loans**.
+- Each payment records what it added (`budget_year`, `budget_month`, `budget_amount` on
+  `rose.payments`), so un-paying or deleting takes back exactly that (never below 0), and
+  manual edits to the line are preserved. Deleting a title releases all its payments.
+- Payments paid before this feature are backfilled on the next read of the budget, report,
+  home stats or Today. Imported payments are marked as already counted.
 
 ## Deploy (all free)
 

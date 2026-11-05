@@ -37,6 +37,11 @@ internal sealed class PaymentRow : IOwnedRow
     public string Status { get; set; } = "";
     public DateOnly? DueDate { get; set; }
     public string Note { get; set; } = "";
+
+    // What the payment added to the budget (all null = nothing); see BudgetMark.
+    public int? BudgetYear { get; set; }
+    public int? BudgetMonth { get; set; }
+    public double? BudgetAmount { get; set; }
 }
 
 internal sealed class BudgetLineRow : IOwnedRow

@@ -1,5 +1,6 @@
 using Rose.Application.Abstractions;
 using Rose.Application.Common;
+using Rose.Application.Tracker;
 using Rose.Domain.Budget;
 using Rose.Domain.Common;
 using Rose.Domain.Tracker;
@@ -56,12 +57,17 @@ public sealed class ImportService(ITrackerWorkbookStore store, ICurrentUser user
                 entry.Item, entry.TotalAmount ?? 0, entry.StartDate ?? "", entry.DueDate ?? "",
                 entry.Frequency ?? "Monthly", entry.Instalments ?? 0, entry.PaymentAmount ?? 0, entry.Notes ?? ""));
         }
+        var imported = new List<Payment>();
         foreach (var entry in payments)
         {
-            book.AddPayment(new Payment(
+            var payment = new Payment(
                 Guid.NewGuid().ToString(), entry.Item, entry.Amount!.Value, entry.Date!, entry.Time!,
-                entry.Status!, Coerce.Iso(entry.DueDate), entry.Note ?? ""));
+                entry.Status!, Coerce.Iso(entry.DueDate), entry.Note ?? "");
+            book.AddPayment(payment);
+            imported.Add(payment);
         }
+        // An import restores data as it was: its budget comes from the budget import, so don't add the amounts again.
+        PaymentBudgetSync.MarkCounted(book, imported, clock.Today());
         await book.SaveAsync(ct);
         return plan with { Applied = true };
     }

@@ -29,7 +29,12 @@ internal sealed class PostgresTrackerBook(
         [.. payments
             .Select(p => new Payment(
                 p.Id, p.Title.Trim(), p.Amount, Mappers.Iso(p.Date), p.Time,
-                PaymentStatus.IsKnown(p.Status) ? p.Status : PaymentStatus.Unpaid, Mappers.Iso(p.DueDate), p.Note))
+                PaymentStatus.IsKnown(p.Status) ? p.Status : PaymentStatus.Unpaid, Mappers.Iso(p.DueDate), p.Note)
+            {
+                InBudget = p is { BudgetYear: { } year, BudgetMonth: { } month, BudgetAmount: { } amount }
+                    ? new BudgetMark(year, month, amount)
+                    : null,
+            })
             .OrderBy(p => p.Date, StringComparer.Ordinal)
             .ThenBy(p => p.Time, StringComparer.Ordinal)];
 
@@ -99,6 +104,15 @@ internal sealed class PostgresTrackerBook(
     {
         if (FindPayment(id) is not { } row) return false;
         row.Status = PaymentStatus.IsKnown(status) ? status : PaymentStatus.Unpaid;
+        return true;
+    }
+
+    public bool SetPaymentBudget(string id, BudgetMark? mark)
+    {
+        if (FindPayment(id) is not { } row) return false;
+        row.BudgetYear = mark?.Year;
+        row.BudgetMonth = mark?.Month;
+        row.BudgetAmount = mark?.Amount;
         return true;
     }
 

@@ -245,6 +245,18 @@ namespace Rose.Infrastructure.Persistence.Migrations
                         .HasColumnType("double precision")
                         .HasColumnName("amount");
 
+                    b.Property<double?>("BudgetAmount")
+                        .HasColumnType("double precision")
+                        .HasColumnName("budget_amount");
+
+                    b.Property<int?>("BudgetMonth")
+                        .HasColumnType("integer")
+                        .HasColumnName("budget_month");
+
+                    b.Property<int?>("BudgetYear")
+                        .HasColumnType("integer")
+                        .HasColumnName("budget_year");
+
                     b.Property<DateOnly?>("Date")
                         .HasColumnType("date")
                         .HasColumnName("date");

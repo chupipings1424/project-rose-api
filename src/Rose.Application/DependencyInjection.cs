@@ -5,6 +5,7 @@ using Rose.Application.Importing;
 using Rose.Application.Notifications;
 using Rose.Application.Reminders;
 using Rose.Application.Savings;
+using Rose.Application.Today;
 using Rose.Application.Tracker;
 using Rose.Application.Users;
 
@@ -18,6 +19,7 @@ public static class DependencyInjection
         services.AddScoped<BudgetService>();
         services.AddScoped<ReportService>();
         services.AddScoped<ImportService>();
+        services.AddScoped<TodayService>();
 
         // Reminders, savings and habits are cached in memory (one partition per user), so there is exactly one of each.
         services.AddSingleton<ReminderService>();

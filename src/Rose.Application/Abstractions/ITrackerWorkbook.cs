@@ -36,6 +36,9 @@ public interface ITrackerWorkbook : IDisposable
     bool UpdatePayment(Payment payment);
 
     bool SetPaymentStatus(string id, string status);
+
+    /// <summary>Records what the payment added to the budget (null = nothing). Returns false if there is no such payment.</summary>
+    bool SetPaymentBudget(string id, BudgetMark? mark);
     bool DeletePayment(string id);
 
     /// <summary>Deletes the title and its payments. Returns how many payments went, or null if the title is unknown.</summary>

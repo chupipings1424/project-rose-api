@@ -20,7 +20,14 @@ public sealed record Payment(
     string Time,
     string Status,
     string DueDate,
-    string Note);
+    string Note)
+{
+    /// <summary>What this payment added to the budget (null = nothing). Kept so it can be taken back exactly.</summary>
+    public BudgetMark? InBudget { get; init; }
+}
+
+/// <summary>An amount a paid payment added to a budget month. <paramref name="Month"/> is 0 (Jan) to 11 (Dec).</summary>
+public sealed record BudgetMark(int Year, int Month, double Amount);
 
 public static class PaymentStatus
 {
