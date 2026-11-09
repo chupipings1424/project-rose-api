@@ -141,6 +141,16 @@ internal sealed class UserRow
     public DateTimeOffset CreatedAt { get; set; }
 }
 
+/// <summary>The answer to a request sent with an Idempotency-Key (see PostgresIdempotencyStore).</summary>
+internal sealed class IdempotencyKeyRow : IOwnedRow
+{
+    public Guid OwnerId { get; set; }
+    public string Key { get; set; } = "";
+    public int StatusCode { get; set; }
+    public string Body { get; set; } = "";
+    public DateTimeOffset CreatedAt { get; set; }
+}
+
 /// <summary>Small server-side settings, e.g. the VAPID keys when they are not configured.</summary>
 internal sealed class AppSecretRow
 {

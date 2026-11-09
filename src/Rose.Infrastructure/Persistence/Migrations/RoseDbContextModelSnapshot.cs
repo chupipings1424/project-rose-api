@@ -235,6 +235,36 @@ namespace Rose.Infrastructure.Persistence.Migrations
                     b.ToTable("habits", "rose");
                 });
 
+            modelBuilder.Entity("Rose.Infrastructure.Persistence.IdempotencyKeyRow", b =>
+                {
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_id");
+
+                    b.Property<string>("Key")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("key");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("body");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<int>("StatusCode")
+                        .HasColumnType("integer")
+                        .HasColumnName("status_code");
+
+                    b.HasKey("OwnerId", "Key")
+                        .HasName("pk_idempotency_keys");
+
+                    b.ToTable("idempotency_keys", "rose");
+                });
+
             modelBuilder.Entity("Rose.Infrastructure.Persistence.PaymentRow", b =>
                 {
                     b.Property<string>("Id")

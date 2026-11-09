@@ -30,6 +30,9 @@ public static class BudgetRules
 
     public static readonly IReadOnlyList<string> Sections = [Revenue, Expense];
 
+    /// <summary>Where a new expense goes when no group is given (quick add, voice commands).</summary>
+    public const string OtherGroup = "Other";
+
     /// <summary>The Expense group new lines for paid Payment Tracker payments go into.</summary>
     public const string LoansGroup = "Loans";
 

@@ -55,6 +55,7 @@ public static class DependencyInjection
         services.AddSingleton<IRepository<SavingsGoal>, SavingsGoalRepository>();
         services.AddSingleton<IRepository<Habit>, HabitRepository>();
         services.AddSingleton<IUserStore, PostgresUserStore>();
+        services.AddSingleton<IIdempotencyStore, PostgresIdempotencyStore>();
         services.TryAddSingleton<IAccountProvider, SupabaseAccountProvider>();
         services.TryAddSingleton<IEmailSender, BrevoEmailSender>();
         services.AddSingleton(new PublicSite(PublicUrl(configuration)));

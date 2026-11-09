@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Rose.Api.Auth;
+using Rose.Api.Infrastructure;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Rose.Application.Reminders;
 using Rose.Application.Tracker;
@@ -24,7 +25,9 @@ public sealed class RemindersController(ReminderService reminders, PushService p
     public Task<IReadOnlyList<Reminder>> List(CancellationToken ct) => reminders.ListAsync(User.UserId(), ct);
 
     /// <summary>Create a reminder.</summary>
+    /// <remarks>Send an <c>Idempotency-Key</c> header so a retry never creates it twice.</remarks>
     [HttpPost("items")]
+    [Idempotent]
     [ProducesResponseType<Reminder>(StatusCodes.Status201Created)]
     public async Task<IActionResult> Create(ReminderRequest request, CancellationToken ct) =>
         StatusCode(StatusCodes.Status201Created, await reminders.CreateAsync(User.UserId(), request, ct));

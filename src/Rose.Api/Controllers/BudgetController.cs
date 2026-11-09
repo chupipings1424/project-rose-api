@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Rose.Api.Infrastructure;
 using Rose.Application.Tracker;
 using Rose.Domain.Budget;
 
@@ -18,6 +19,14 @@ public sealed class BudgetController(BudgetService budget) : TrackerControllerBa
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> AddLine(AddBudgetLineRequest request, CancellationToken ct) =>
         StatusCode(StatusCodes.Status201Created, await budget.AddLineAsync(request, ct));
+
+    /// <summary>
+    /// Add money spent to an expense item for the month of <c>date</c>; the line is created if needed.
+    /// Send an <c>Idempotency-Key</c> header so a retry never adds it twice.
+    /// </summary>
+    [HttpPost("budget/expenses")]
+    [Idempotent]
+    public Task<ExpenseAdded> AddExpense(AddExpenseRequest request, CancellationToken ct) => budget.AddExpenseAsync(request, ct);
 
     /// <summary>Change one month (<c>month</c> + <c>value</c>) or the item / group / notes / amounts.</summary>
     /// <response code="404">Budget line not found.</response>

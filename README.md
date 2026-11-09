@@ -131,7 +131,7 @@ Test tokens are minted locally with a test-only HS256 secret.
 | --- | --- |
 | Auth | `GET /api/config` (public), `GET /api/auth/session`, `POST /api/auth/password` |
 | Admin | `/api/admin/users` `GET`, `POST`, `POST {id}/password`, `DELETE {id}` |
-| Payment Tracker | `/api/payment-tracker/` `accounts`, `summary/{title}`, `payments`, `budget`, `report/summary`, `import/*`, `download`, `home-stats` |
+| Payment Tracker | `/api/payment-tracker/` `accounts`, `summary/{title}`, `payments`, `budget`, `budget/expenses`, `report/summary`, `import/*`, `download`, `home-stats` |
 | Today | `GET /api/today`: unpaid payments due within 7 days (and overdue), today's reminders, habits, this month's budget |
 | Reminders | `/api/reminders/` `status`, `items`, `items/{id}/complete\|dismiss\|snooze`, `push/key\|devices\|subscribe\|unsubscribe\|test` |
 | Savings Goals | `/api/savings/` `goals`, `goals/{id}`, `goals/{id}/entries`, `goals/{id}/entries/{entryId}` |
@@ -154,6 +154,17 @@ with the Payment Tracker:
 - Payments paid before this feature are backfilled on the next read of the budget, report,
   home stats or Today. Imported payments are marked as already counted.
 
+### Quick expenses and safe retries
+
+- `POST /api/payment-tracker/budget/expenses` `{ item, amount, group?, date? }` adds money
+  spent to that Expense item for the month of `date` (default today). The **server** does the
+  sum, so two phones (or a retry) never overwrite each other. A new item gets a line in
+  *Other* (or `group`).
+- **Idempotency-Key**: `POST payments`, `POST budget/expenses` and `POST reminders/items`
+  accept an `Idempotency-Key` header (max 100 characters, e.g. a UUID). The first successful
+  answer is kept in `rose.idempotency_keys` for 30 days; a repeat with the same key gets that
+  answer back (plus `Idempotent-Replayed: true`) and saves nothing. The React app's offline
+  queue sends one with every save, so a dropped connection can never double-count.
 ## Deploy (all free)
 
 The `Dockerfile` builds the React app from `chupipings1424/project-rose` (`UI_REF`, default

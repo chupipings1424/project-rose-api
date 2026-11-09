@@ -72,6 +72,45 @@ public sealed class BudgetService(ITrackerWorkbookStore store, ICurrentUser user
         return new BudgetChanged(true, View(book, year));
     }
 
+    /// <summary>
+    /// Adds money spent to an Expense line's month. The server does the sum (not the phone), so
+    /// two quick adds - or one sent from an offline queue - can never overwrite each other.
+    /// </summary>
+    public async Task<ExpenseAdded> AddExpenseAsync(AddExpenseRequest request, CancellationToken ct = default)
+    {
+        var item = (request.Item ?? "").Trim();
+        if (item.Length == 0) throw new ValidationException("An item name is required.");
+        var amount = Coerce.Round(Coerce.ToDouble(request.Amount));
+        if (amount <= 0) throw new ValidationException("The amount must be more than 0.");
+        var date = clock.Today();
+        if (!string.IsNullOrWhiteSpace(request.Date))
+            date = Coerce.ToDate(request.Date) ?? throw new ValidationException($"'{request.Date}' is not a date.");
+        var group = (request.Group ?? "").Trim();
+        var month = date.Month - 1;
+
+        using var book = await store.OpenAsync(user.Id, ct);
+        var sameItem = book.BudgetLines()
+            .Where(l => l.Year == date.Year && l.Section == BudgetRules.Expense
+                && string.Equals(l.Item.Trim(), item, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        // Same item in several groups: the one asked for, else the first.
+        var line = sameItem.FirstOrDefault(l => string.Equals(l.Group, group, StringComparison.OrdinalIgnoreCase))
+            ?? sameItem.FirstOrDefault();
+        var created = line is null;
+        if (line is null)
+        {
+            line = new BudgetLine(
+                PaymentTrackerService.NewId(), date.Year, BudgetRules.Expense,
+                group.Length == 0 ? BudgetRules.OtherGroup : group, item, new double[12], 0, "");
+            book.AddBudgetLine(line);
+        }
+
+        var total = Coerce.Round(line.Amounts[month] + amount);
+        book.SetBudgetAmount(line.Id, month, total);
+        await book.SaveAsync(ct);
+        return new ExpenseAdded(line.Id, line.Item, line.Group, date.Year, month, total, created);
+    }
+
     /// <summary>Deletes every line of a year in one save. Answers with the current year's budget.</summary>
     public async Task<BudgetYearDeleted> DeleteYearAsync(int year, CancellationToken ct = default)
     {

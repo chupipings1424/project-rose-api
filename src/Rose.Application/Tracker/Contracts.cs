@@ -34,6 +34,11 @@ public sealed record UpdateBudgetLineRequest(
 
 public sealed record CopyBudgetYearRequest(string? From, string? To, bool IncludeAmounts);
 
+/// <summary>Money spent on <c>Item</c>: added to that Expense line (created when it does not exist yet).</summary>
+/// <param name="Group">Used only when the line is new (default: Other).</param>
+/// <param name="Date">When it was spent (yyyy-MM-dd, default today): picks the year and month.</param>
+public sealed record AddExpenseRequest(string? Item, string? Group, string? Amount, string? Date);
+
 public sealed record HomeStats(string Workbook, HomePayments Payments, HomeBudget Budget);
 
 public sealed record HomePayments(int Accounts, double Total, int PaidCount, int PaymentCount, string? NextDue);
@@ -58,3 +63,8 @@ public sealed record BudgetChanged(bool Ok, BudgetView Budget);
 public sealed record BudgetYearDeleted(bool Ok, int Deleted, BudgetView Budget);
 
 public sealed record BudgetYearCopied(int Copied, BudgetView Budget);
+
+/// <param name="Month">0 (Jan) to 11 (Dec).</param>
+/// <param name="MonthTotal">The line's amount for that month after adding.</param>
+/// <param name="CreatedLine">True when the item was new and a line was added for it.</param>
+public sealed record ExpenseAdded(string LineId, string Item, string Group, int Year, int Month, double MonthTotal, bool CreatedLine);

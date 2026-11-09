@@ -73,6 +73,7 @@ internal sealed class PostgresUserStore(IDbContextFactory<RoseDbContext> context
             await Delete(db.PushDevices);
             await Delete(db.SavingsGoals);
             await Delete(db.Habits);
+            await Delete(db.IdempotencyKeys);
             await db.Users.Where(u => u.Id == id).ExecuteDeleteAsync(cancellationToken);
             return 0;
 

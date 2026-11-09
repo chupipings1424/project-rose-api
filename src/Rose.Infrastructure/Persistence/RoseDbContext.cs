@@ -20,6 +20,7 @@ public sealed class RoseDbContext(DbContextOptions<RoseDbContext> options) : DbC
     internal DbSet<HabitRow> Habits => Set<HabitRow>();
     internal DbSet<AppSecretRow> AppSecrets => Set<AppSecretRow>();
     internal DbSet<UserRow> Users => Set<UserRow>();
+    internal DbSet<IdempotencyKeyRow> IdempotencyKeys => Set<IdempotencyKeyRow>();
 
     /// <summary>The one place the provider is configured (app, tests and design-time tools).</summary>
     public static void Configure(DbContextOptionsBuilder options, string connectionString, Action<NpgsqlDbContextOptionsBuilder>? npgsql = null) =>
@@ -109,6 +110,13 @@ public sealed class RoseDbContext(DbContextOptions<RoseDbContext> options) : DbC
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).ValueGeneratedNever();
             e.HasIndex(x => x.Email).IsUnique();
+        });
+
+        modelBuilder.Entity<IdempotencyKeyRow>(e =>
+        {
+            e.ToTable("idempotency_keys");
+            e.HasKey(x => new { x.OwnerId, x.Key });
+            e.Property(x => x.Key).HasMaxLength(100);
         });
 
         modelBuilder.Entity<AppSecretRow>(e =>

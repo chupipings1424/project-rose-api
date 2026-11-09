@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Rose.Api.Infrastructure;
 using Rose.Application.Tracker;
 
 namespace Rose.Api.Controllers;
@@ -7,7 +8,9 @@ namespace Rose.Api.Controllers;
 public sealed class PaymentsController(PaymentTrackerService tracker) : TrackerControllerBase
 {
     /// <summary>Record a payment. Date and time default to now; status defaults to Paid.</summary>
+    /// <remarks>Send an <c>Idempotency-Key</c> header so a retry never records it twice.</remarks>
     [HttpPost("payments")]
+    [Idempotent]
     [ProducesResponseType<PaymentCreated>(StatusCodes.Status201Created)]
     public async Task<IActionResult> Add(AddPaymentRequest request, CancellationToken ct) =>
         StatusCode(StatusCodes.Status201Created, await tracker.AddPaymentAsync(request, ct));
