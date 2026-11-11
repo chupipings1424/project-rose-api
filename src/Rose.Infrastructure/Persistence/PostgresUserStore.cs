@@ -54,6 +54,7 @@ internal sealed class PostgresUserStore(IDbContextFactory<RoseDbContext> context
             moved += await Claim(db.PushDevices);
             moved += await Claim(db.SavingsGoals);
             moved += await Claim(db.Habits);
+            moved += await Claim(db.Loans);
             return moved;
 
             Task<int> Claim<TRow>(DbSet<TRow> rows)
@@ -73,6 +74,7 @@ internal sealed class PostgresUserStore(IDbContextFactory<RoseDbContext> context
             await Delete(db.PushDevices);
             await Delete(db.SavingsGoals);
             await Delete(db.Habits);
+            await Delete(db.Loans);
             await Delete(db.IdempotencyKeys);
             await db.Users.Where(u => u.Id == id).ExecuteDeleteAsync(cancellationToken);
             return 0;

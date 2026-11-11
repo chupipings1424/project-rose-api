@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Rose.Application.Abstractions;
 using Rose.Application.Reminders;
 using Rose.Domain.Habits;
+using Rose.Domain.Loans;
 using Rose.Domain.Reminders;
 using Rose.Domain.Savings;
 
@@ -138,6 +139,17 @@ internal sealed class SavingsGoalRepository(IDbContextFactory<RoseDbContext> con
         base.Update(db, row, wanted);
         Sync(db, row.Entries, wanted.Entries, e => e.Id);
     }
+}
+
+internal sealed class LoanRepository(IDbContextFactory<RoseDbContext> contexts) : EfRepository<Loan, LoanRow>(contexts)
+{
+    protected override IQueryable<LoanRow> Query(RoseDbContext db) => db.Loans;
+    protected override string IdOf(Loan item) => item.Id;
+    protected override string RowId(LoanRow row) => row.Id;
+    protected override System.Linq.Expressions.Expression<Func<LoanRow, bool>> Within(IReadOnlyCollection<string> ids) =>
+        l => ids.Contains(l.Id);
+    protected override Loan ToDomain(LoanRow row) => Mappers.ToDomain(row);
+    protected override LoanRow ToRow(Loan item) => Mappers.ToRow(item);
 }
 
 internal sealed class HabitRepository(IDbContextFactory<RoseDbContext> contexts) : EfRepository<Habit, HabitRow>(contexts)

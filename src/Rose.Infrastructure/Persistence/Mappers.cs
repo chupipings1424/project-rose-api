@@ -1,6 +1,7 @@
 using Rose.Application.Reminders;
 using Rose.Domain.Common;
 using Rose.Domain.Habits;
+using Rose.Domain.Loans;
 using Rose.Domain.Reminders;
 using Rose.Domain.Savings;
 
@@ -84,6 +85,32 @@ internal static class Mappers
         CreatedAt = g.CreatedAt,
         UpdatedAt = g.UpdatedAt,
         Entries = [.. g.Entries.OrderBy(e => e.Position).Select(e => new SavingsEntry(e.Id, e.Date, e.Amount, e.Note))],
+    };
+
+public static LoanRow ToRow(Loan l) => new()
+    {
+        Id = l.Id,
+        Name = l.Name,
+        Type = l.Type,
+        LoanDate = l.LoanDate,
+        Term = l.Term,
+        MonthlyAmortization = l.MonthlyAmortization,
+        Amount = l.Amount,
+        CreatedAt = l.CreatedAt.ToUniversalTime(),
+        UpdatedAt = l.UpdatedAt.ToUniversalTime(),
+    };
+
+    public static Loan ToDomain(LoanRow l) => new()
+    {
+        Id = l.Id,
+        Name = l.Name,
+        Type = l.Type,
+        LoanDate = l.LoanDate,
+        Term = l.Term,
+        MonthlyAmortization = l.MonthlyAmortization,
+        Amount = l.Amount,
+        CreatedAt = l.CreatedAt,
+        UpdatedAt = l.UpdatedAt,
     };
 
     public static HabitRow ToRow(Habit h) => new()

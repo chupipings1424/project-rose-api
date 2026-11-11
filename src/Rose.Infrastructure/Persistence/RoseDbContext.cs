@@ -18,6 +18,7 @@ public sealed class RoseDbContext(DbContextOptions<RoseDbContext> options) : DbC
     internal DbSet<PushDeviceRow> PushDevices => Set<PushDeviceRow>();
     internal DbSet<SavingsGoalRow> SavingsGoals => Set<SavingsGoalRow>();
     internal DbSet<HabitRow> Habits => Set<HabitRow>();
+    internal DbSet<LoanRow> Loans => Set<LoanRow>();
     internal DbSet<AppSecretRow> AppSecrets => Set<AppSecretRow>();
     internal DbSet<UserRow> Users => Set<UserRow>();
     internal DbSet<IdempotencyKeyRow> IdempotencyKeys => Set<IdempotencyKeyRow>();
@@ -87,6 +88,15 @@ public sealed class RoseDbContext(DbContextOptions<RoseDbContext> options) : DbC
         {
             e.ToTable("savings_entries");
             e.HasKey(x => x.Id);
+            e.Property(x => x.Amount).HasColumnType("numeric");
+        });
+
+        modelBuilder.Entity<LoanRow>(e =>
+        {
+            e.ToTable("loans");
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => x.OwnerId);
+            e.Property(x => x.MonthlyAmortization).HasColumnType("numeric");
             e.Property(x => x.Amount).HasColumnType("numeric");
         });
 

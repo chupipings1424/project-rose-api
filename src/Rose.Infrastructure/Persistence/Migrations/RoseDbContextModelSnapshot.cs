@@ -265,6 +265,59 @@ namespace Rose.Infrastructure.Persistence.Migrations
                     b.ToTable("idempotency_keys", "rose");
                 });
 
+            modelBuilder.Entity("Rose.Infrastructure.Persistence.LoanRow", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("text")
+                        .HasColumnName("id");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("numeric")
+                        .HasColumnName("amount");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateOnly>("LoanDate")
+                        .HasColumnType("date")
+                        .HasColumnName("loan_date");
+
+                    b.Property<decimal>("MonthlyAmortization")
+                        .HasColumnType("numeric")
+                        .HasColumnName("monthly_amortization");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_id");
+
+                    b.Property<int>("Term")
+                        .HasColumnType("integer")
+                        .HasColumnName("term");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("type");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_loans");
+
+                    b.HasIndex("OwnerId")
+                        .HasDatabaseName("ix_loans_owner_id");
+
+                    b.ToTable("loans", "rose");
+                });
+
             modelBuilder.Entity("Rose.Infrastructure.Persistence.PaymentRow", b =>
                 {
                     b.Property<string>("Id")

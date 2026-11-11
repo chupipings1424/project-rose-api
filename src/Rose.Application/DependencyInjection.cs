@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Rose.Application.Abstractions;
 using Rose.Application.Habits;
 using Rose.Application.Importing;
+using Rose.Application.Loans;
 using Rose.Application.Notifications;
 using Rose.Application.Reminders;
 using Rose.Application.Savings;
@@ -21,12 +22,13 @@ public static class DependencyInjection
         services.AddScoped<ImportService>();
         services.AddScoped<TodayService>();
 
-        // Reminders, savings and habits are cached in memory (one partition per user), so there is exactly one of each.
+        // Reminders, savings, habits and loans are cached in memory (one partition per user), so there is exactly one of each.
         services.AddSingleton<ReminderService>();
         services.AddSingleton<PushService>();
         services.AddSingleton<SavingsService>();
         services.AddSingleton<HabitService>();
-        foreach (var cache in new[] { typeof(ReminderService), typeof(PushService), typeof(SavingsService), typeof(HabitService) })
+        services.AddSingleton<LoanService>();
+        foreach (var cache in new[] { typeof(ReminderService), typeof(PushService), typeof(SavingsService), typeof(HabitService), typeof(LoanService) })
         {
             services.AddSingleton(typeof(IUserScopedCache), sp => sp.GetRequiredService(cache));
         }

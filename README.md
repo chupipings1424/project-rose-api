@@ -1,8 +1,8 @@
 # Project ROSE API
 
 The backend for [Project ROSE](https://github.com/chupipings1424/project-rose): a .NET 9 ASP.NET Core
-Web API serving the **Payment Tracker**, **Personal Budget**, **Reminders**, **Savings Goals** and
-**Habit Tracker** projects. In the cloud it also serves the built React app, so ROSE is one website.
+Web API serving the **Payment Tracker**, **Personal Budget**, **Reminders**, **Savings Goals**,
+**Habit Tracker** and **Loan Tracker** projects. In the cloud it also serves the built React app, so ROSE is one website.
 
 ```
 Browser / installed PWA ??HTTPS??> Render (free, Singapore): Docker container
@@ -136,6 +136,7 @@ Test tokens are minted locally with a test-only HS256 secret.
 | Reminders | `/api/reminders/` `status`, `items`, `items/{id}/complete\|dismiss\|snooze`, `push/key\|devices\|subscribe\|unsubscribe\|test` |
 | Savings Goals | `/api/savings/` `goals`, `goals/{id}`, `goals/{id}/entries`, `goals/{id}/entries/{entryId}` |
 | Habit Tracker | `/api/habits/` `items`, `items/{id}`, `PUT items/{id}/days/{yyyy-MM-dd}`, `items/{id}/nudge/complete\|dismiss\|snooze` |
+| Loan Tracker | `/api/loans` `GET`, `POST`, `PATCH {id}`, `DELETE {id}`, `GET types`, `GET report` (Excel) |
 | Health | `GET /health` (includes a database check) |
 
 `GET /api/payment-tracker/download` still gives you everything as an Excel workbook.
@@ -165,6 +166,19 @@ with the Payment Tracker:
   answer is kept in `rose.idempotency_keys` for 30 days; a repeat with the same key gets that
   answer back (plus `Idempotent-Replayed: true`) and saves nothing. The React app's offline
   queue sends one with every save, so a dropped connection can never double-count.
+
+### Loans: payments are computed, never stored
+
+A loan stores only what you typed: name, type, loan date, term (months), monthly amortization
+and loan amount. `LoanRules` (Domain/Loans) works out everything else from **today's date**:
+
+- Payment *n* is due on `loan date + n months` (first payment one month after the loan date;
+  a loan on the 31st pays on the last day of shorter months). A payment counts as paid once
+  its due date has arrived.
+- Paid = payments made x amortization; balance = amortization x term - paid; interest =
+  amortization x term - loan amount; the finish date is the last due date.
+- Old loans just work: enter any loan date and ROSE fills in the past payments.
+- `GET /api/loans/report` builds `loans.xlsx`: a summary sheet plus one schedule sheet per loan.
 ## Deploy (all free)
 
 The `Dockerfile` builds the React app from `chupipings1424/project-rose` (`UI_REF`, default

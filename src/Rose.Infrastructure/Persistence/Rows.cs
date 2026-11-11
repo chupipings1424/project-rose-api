@@ -108,6 +108,20 @@ internal sealed class SavingsEntryRow
     public string Note { get; set; } = "";
 }
 
+internal sealed class LoanRow : IOwnedRow
+{
+    public Guid OwnerId { get; set; }
+    public string Id { get; set; } = "";
+    public string Name { get; set; } = "";
+    public string Type { get; set; } = "";
+    public DateOnly LoanDate { get; set; }
+    public int Term { get; set; }
+    public decimal MonthlyAmortization { get; set; }
+    public decimal Amount { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
 internal sealed class HabitRow : IOwnedRow
 {
     public Guid OwnerId { get; set; }
