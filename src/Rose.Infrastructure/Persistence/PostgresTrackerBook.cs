@@ -22,7 +22,7 @@ internal sealed class PostgresTrackerBook(
     public IReadOnlyList<Account> Accounts() =>
         [.. accounts.Select(a => new Account(
             a.Title.Trim(), a.TotalAmount, Mappers.Iso(a.StartDate), Mappers.Iso(a.DueDate),
-            a.Frequency.Trim(), a.Instalments, a.PaymentAmount, a.Notes))];
+            a.Frequency.Trim(), a.Instalments, a.PaymentAmount, a.Notes) { Kind = AccountKind.Normalize(a.Kind) })];
 
     /// <summary>Sorted by date text, then time text (stable), like the original tracker.</summary>
     public IReadOnlyList<Payment> Payments() =>
@@ -69,6 +69,7 @@ internal sealed class PostgresTrackerBook(
             Instalments = account.Instalments,
             PaymentAmount = account.PaymentAmount,
             Notes = account.Notes,
+            Kind = AccountKind.Normalize(account.Kind),
         };
         db.Accounts.Add(row);
         accounts.Add(row);

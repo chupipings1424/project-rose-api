@@ -42,6 +42,34 @@ public sealed class PaymentTrackerTests(RoseApiFactory factory) : IClassFixture<
     }
 
     [Fact]
+    public async Task A_bill_is_saved_with_its_kind_and_has_monthly_totals()
+    {
+        var client = await factory.CreateAuthenticatedClientAsync();
+        var title = "Water " + Guid.NewGuid().ToString("N")[..6];
+        var encoded = Uri.EscapeDataString(title);
+
+        var created = await client.PostAsJsonAsync(Url("accounts"), new { title, kind = "bill", notes = "Maynilad" });
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        await client.PostAsJsonAsync(Url("payments"), new
+        {
+            title, amount = "480", date = "2026-01-10", time = "10:30", status = "Paid", due_date = "", note = "",
+        });
+
+        var accounts = await (await client.GetAsync(Url("accounts"))).JsonAsync();
+        var account = accounts.EnumerateArray().Single(a => a.GetProperty("title").GetString() == title);
+        Assert.Equal("bill", account.GetProperty("kind").GetString());
+
+        var summary = await (await client.GetAsync(Url($"summary/{encoded}"))).JsonAsync();
+        Assert.Equal("bill", summary.GetProperty("kind").GetString());
+        Assert.False(summary.GetProperty("has_plan").GetBoolean());
+        Assert.Equal(0, summary.GetProperty("remaining").GetDouble());
+        Assert.Equal(480, summary.GetProperty("total_paid").GetDouble());
+        Assert.Equal(12, summary.GetProperty("monthly").GetArrayLength());
+
+        await client.DeleteAsync(Url($"accounts/{encoded}"));
+    }
+
+    [Fact]
     public async Task Paying_a_scheduled_instalment_settles_it_instead_of_adding_a_row()
     {
         var client = await factory.CreateAuthenticatedClientAsync();

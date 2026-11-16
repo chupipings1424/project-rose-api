@@ -55,7 +55,10 @@ public sealed class ImportService(ITrackerWorkbookStore store, ICurrentUser user
         {
             book.AddAccount(new Account(
                 entry.Item, entry.TotalAmount ?? 0, entry.StartDate ?? "", entry.DueDate ?? "",
-                entry.Frequency ?? "Monthly", entry.Instalments ?? 0, entry.PaymentAmount ?? 0, entry.Notes ?? ""));
+                entry.Frequency ?? "Monthly", entry.Instalments ?? 0, entry.PaymentAmount ?? 0, entry.Notes ?? "")
+            {
+                Kind = AccountKind.Normalize(entry.AccountType),
+            });
         }
         var imported = new List<Payment>();
         foreach (var entry in payments)

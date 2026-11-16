@@ -43,6 +43,7 @@ public sealed class RoseDbContext(DbContextOptions<RoseDbContext> options) : DbC
             e.HasKey(x => x.Seq);
             e.Property(x => x.Seq).UseIdentityAlwaysColumn();
             e.HasIndex(x => x.OwnerId);
+            e.Property(x => x.Kind).HasDefaultValue("plan");
         });
 
         modelBuilder.Entity<PaymentRow>(e =>

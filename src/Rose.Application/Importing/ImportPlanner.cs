@@ -148,6 +148,7 @@ public static class ImportPlanner
             entry.Instalments = Coerce.ToInt(CellOr(row, 0, "instalments", "installments", "payments"));
             entry.PaymentAmount = Coerce.Round(Coerce.ToDouble(CellOr(row, 0, "payment amount", "per payment")));
             entry.Notes = Coerce.ToText(CellOr(row, "", "notes", "note")).Trim();
+            entry.AccountType = AccountKind.Normalize(Coerce.ToText(CellOr(row, "", "type", "kind")));
 
             var key = title.ToLowerInvariant();
             if (plannedTitles.Contains(key)) entry.Fail("This title is repeated earlier in the file.");

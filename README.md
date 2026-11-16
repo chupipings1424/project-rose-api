@@ -141,14 +141,26 @@ Test tokens are minted locally with a test-only HS256 secret.
 
 `GET /api/payment-tracker/download` still gives you everything as an Excel workbook.
 
+### Bills vs instalment plans
+
+A title has a `kind` (`rose.accounts.kind`): `plan` (default; a total split into instalments)
+or `bill` (open-ended monthly bill like water or WiFi with a different amount each time).
+`POST accounts` `{ title, kind: "bill", notes? }` needs only a title and makes no schedule.
+A bill's summary has `paid_this_month`, `paid_this_year`, `average_per_month` (over months
+with payments) and `monthly` (the last 12 months), with `remaining`/`progress` at 0. The
+report keeps bills out of the plan KPIs, repayment timeline and status split (they still show
+in activity, overdue and upcoming); `by_title` rows carry `kind`. The Excel Accounts sheet has
+a **Type** column (Plan/Bill), also read by the import.
+
 ### Paid payments -> budget
 
 `PaymentBudgetSync` (Application/Tracker) keeps the budget's **actual spending** in step
 with the Payment Tracker:
 
 - A **Paid** payment adds its amount to the Expense line whose item equals its title
-  (case-insensitive, *Loans* group preferred) in the month of its date (else due date). No
-  line? It creates one in **Loans**.
+  (case-insensitive, *Loans* group preferred, *Bills* for bills) in the month of its date (else
+  due date). No line? It creates one in **Loans** (or **Bills** for a bill). It adds on top of
+  whatever the line already holds, e.g. your own estimate.
 - Each payment records what it added (`budget_year`, `budget_month`, `budget_amount` on
   `rose.payments`), so un-paying or deleting takes back exactly that (never below 0), and
   manual edits to the line are preserved. Deleting a title releases all its payments.

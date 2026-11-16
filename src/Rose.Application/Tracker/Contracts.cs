@@ -15,7 +15,8 @@ public sealed record CreateAccountRequest(
     string? StartDate,
     string? DueDate,
     string? AmountMode,
-    string? Notes);
+    string? Notes,
+    string? Kind = null);
 
 public sealed record SchedulePreviewRequest(
     string? Amount, string? TotalAmount, string? Instalments, string? Frequency, string? StartDate, string? AmountMode);

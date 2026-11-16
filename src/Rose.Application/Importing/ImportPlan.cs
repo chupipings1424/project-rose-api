@@ -55,6 +55,8 @@ public sealed class ImportEntry
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public double[]? Amounts { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public double? Total { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? Notes { get; set; }
+    /// <summary>For titles: "plan" or "bill" (from a Type column).</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? AccountType { get; set; }
 
     // accounts (titles)
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public double? TotalAmount { get; set; }

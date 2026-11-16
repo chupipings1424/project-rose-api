@@ -32,17 +32,22 @@ public static class ReportBuilder
         var prefix = $"{year}-";
 
         // ---- payments ----
-        var paid = payments.Where(p => p.IsPaid()).ToList();
-        var unpaid = payments.Where(p => !p.IsPaid()).ToList();
+        // Bills (water, WiFi...) have no total to pay off, so they stay out of the plan KPIs, the
+        // repayment timeline and the status split, but still count for activity, overdue and upcoming.
+        var bills = accounts.Where(a => a.IsBill).Select(a => a.Title.Trim()).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var planPayments = payments.Where(p => !bills.Contains(p.Title.Trim())).ToList();
+        var paid = planPayments.Where(p => p.IsPaid()).ToList();
+        var unpaid = planPayments.Where(p => !p.IsPaid()).ToList();
         var paidTotal = Coerce.Round(paid.Sum(p => p.Amount));
         var unpaidTotal = Coerce.Round(unpaid.Sum(p => p.Amount));
-        var trackedTotal = Coerce.Round(accounts.Sum(a => a.TotalAmount));
+        var trackedTotal = Coerce.Round(accounts.Where(a => !a.IsBill).Sum(a => a.TotalAmount));
         var scheduledTotal = Coerce.Round(paidTotal + unpaidTotal);
         var planTotal = trackedTotal != 0 ? trackedTotal : scheduledTotal;
 
-        var overdue = unpaid.Where(p => p.DueOrDate().Length > 0 && string.CompareOrdinal(p.DueOrDate(), todayIso) < 0).ToList();
+        var allUnpaid = payments.Where(p => !p.IsPaid()).ToList();
+        var overdue = allUnpaid.Where(p => p.DueOrDate().Length > 0 && string.CompareOrdinal(p.DueOrDate(), todayIso) < 0).ToList();
 
-        var upcoming = unpaid
+        var upcoming = allUnpaid
             .Where(p => p.DueOrDate().Length > 0)
             .Select(p => new UpcomingPayment(
                 p.Title,
@@ -55,7 +60,7 @@ public static class ReportBuilder
 
         var timeline = new List<TimelinePoint>();
         var running = 0.0;
-        foreach (var p in payments.OrderBy(p => p.Date, StringComparer.Ordinal).ThenBy(p => p.Time, StringComparer.Ordinal))
+        foreach (var p in planPayments.OrderBy(p => p.Date, StringComparer.Ordinal).ThenBy(p => p.Time, StringComparer.Ordinal))
         {
             if (p.Date.Length == 0) continue;
             if (p.IsPaid()) running += p.Amount;
@@ -109,7 +114,7 @@ public static class ReportBuilder
                 Outstanding: Coerce.Round(Math.Max(planTotal - paidTotal, 0)),
                 Progress: planTotal != 0 ? Coerce.Round(paidTotal / planTotal * 100, 1) : 0,
                 Accounts: accounts.Count,
-                PaymentCount: payments.Count,
+                PaymentCount: planPayments.Count,
                 PaidCount: paid.Count,
                 UnpaidCount: unpaid.Count,
                 OverdueCount: overdue.Count,
@@ -148,6 +153,13 @@ public static class ReportBuilder
         {
             var mine = payments.Where(p => p.HasTitle(account.Title)).ToList();
             var done = Coerce.Round(mine.Where(p => p.IsPaid()).Sum(p => p.Amount));
+            if (account.IsBill)
+            {
+                rows.Add(new TitleProgress(
+                    account.Title, done, done, 0, 0, mine.Count(p => p.IsPaid()), mine.Count,
+                    account.Frequency, 0, AccountKind.Bill));
+                continue;
+            }
             var total = account.TotalAmount != 0 ? account.TotalAmount : Coerce.Round(mine.Sum(p => p.Amount));
             rows.Add(new TitleProgress(
                 account.Title,

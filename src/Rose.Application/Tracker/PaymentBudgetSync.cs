@@ -7,8 +7,9 @@ namespace Rose.Application.Tracker;
 
 /// <summary>
 /// Keeps the budget in step with the Payment Tracker: every Paid payment adds its amount to the
-/// Expense line named like its title (in the month of its date), creating that line under
-/// <see cref="BudgetRules.LoansGroup"/> when there is none. Each payment remembers what it added
+/// Expense line named like its title (in the month of its date, in any group), creating that line
+/// under <see cref="BudgetRules.LoansGroup"/> (plans) or <see cref="BudgetRules.BillsGroup"/> (bills)
+/// when there is none. Each payment remembers what it added
 /// (<see cref="Payment.InBudget"/>), so unpaying or deleting it takes back exactly that amount -
 /// even if the budget line was edited by hand in between.
 /// </summary>
@@ -23,12 +24,14 @@ public static class PaymentBudgetSync
     public static int Reconcile(ITrackerWorkbook book, DateOnly today)
     {
         var changed = 0;
+        var bills = BillTitles(book);
         foreach (var payment in book.Payments())
         {
             var wanted = Wanted(payment, today);
             if (payment.InBudget == wanted) continue;
-            if (payment.InBudget is { } old) Adjust(book, payment.Title, old, -old.Amount);
-            if (wanted is not null) Adjust(book, payment.Title, wanted, wanted.Amount);
+            var group = GroupFor(payment.Title, bills);
+            if (payment.InBudget is { } old) Adjust(book, payment.Title, group, old, -old.Amount);
+            if (wanted is not null) Adjust(book, payment.Title, group, wanted, wanted.Amount);
             book.SetPaymentBudget(payment.Id, wanted);
             changed++;
         }
@@ -44,10 +47,11 @@ public static class PaymentBudgetSync
     /// <summary>Takes back what these payments added, before they are deleted.</summary>
     public static void Release(ITrackerWorkbook book, IEnumerable<Payment> payments)
     {
+        var bills = BillTitles(book);
         foreach (var payment in payments)
         {
             if (payment.InBudget is not { } mark) continue;
-            Adjust(book, payment.Title, mark, -mark.Amount);
+            Adjust(book, payment.Title, GroupFor(payment.Title, bills), mark, -mark.Amount);
             book.SetPaymentBudget(payment.Id, null);
         }
     }
@@ -66,7 +70,18 @@ public static class PaymentBudgetSync
         return new BudgetMark(day.Year, day.Month - 1, Coerce.Round(payment.Amount));
     }
 
-    private static void Adjust(ITrackerWorkbook book, string title, BudgetMark mark, double delta)
+    private static HashSet<string> BillTitles(ITrackerWorkbook book) =>
+        book.Accounts().Where(a => a.IsBill).Select(a => a.Title.Trim()).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Bills go under "Bills", instalment plans under "Loans" (only used when the line has to be created).</summary>
+    private static string GroupFor(string title, HashSet<string> bills) =>
+        bills.Contains(title.Trim()) ? BudgetRules.BillsGroup : BudgetRules.LoansGroup;
+
+    /// <summary>
+    /// Adds <paramref name="delta"/> to the Expense line named like the title - in any group, preferring
+    /// <paramref name="group"/> - and creates the line in <paramref name="group"/> when there is none.
+    /// </summary>
+    private static void Adjust(ITrackerWorkbook book, string title, string group, BudgetMark mark, double delta)
     {
         var item = title.Trim();
         var candidates = book.BudgetLines()
@@ -74,7 +89,7 @@ public static class PaymentBudgetSync
                 && l.Section == BudgetRules.Expense
                 && string.Equals(l.Item, item, StringComparison.OrdinalIgnoreCase))
             .ToList();
-        var line = candidates.Find(l => string.Equals(l.Group, BudgetRules.LoansGroup, StringComparison.OrdinalIgnoreCase))
+        var line = candidates.Find(l => string.Equals(l.Group, group, StringComparison.OrdinalIgnoreCase))
             ?? candidates.FirstOrDefault();
 
         if (line is not null)
@@ -88,7 +103,7 @@ public static class PaymentBudgetSync
         var amounts = new double[12];
         amounts[mark.Month] = Coerce.Round(delta);
         book.AddBudgetLine(new BudgetLine(
-            PaymentTrackerService.NewId(), mark.Year, BudgetRules.Expense, BudgetRules.LoansGroup, item,
+            PaymentTrackerService.NewId(), mark.Year, BudgetRules.Expense, group, item,
             amounts, amounts[mark.Month], NewLineNote));
     }
 }

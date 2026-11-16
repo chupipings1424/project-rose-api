@@ -44,16 +44,25 @@ public sealed class PaymentTrackerService(ITrackerWorkbookStore store, ICurrentU
         return book.Accounts();
     }
 
-    /// <summary>Without instalments: just the title. With instalments: the title plus one Unpaid payment per instalment.</summary>
+    /// <summary>
+    /// A bill: just the title (no total, no instalments). Otherwise without instalments: just the title;
+    /// with instalments: the title plus one Unpaid payment per instalment.
+    /// </summary>
     public async Task<IReadOnlyList<Account>> CreateAccountAsync(CreateAccountRequest request, CancellationToken ct = default)
     {
         var title = (request.Title ?? "").Trim();
         if (title.Length == 0) throw new ValidationException("Title is required.");
+        if (!AccountKind.IsKnown(request.Kind)) throw new ValidationException("Kind must be 'plan' or 'bill'.");
         var amount = request.Amount ?? request.TotalAmount;
         var frequency = string.IsNullOrEmpty(request.Frequency) ? "Monthly" : request.Frequency;
 
         using var book = await store.OpenAsync(user.Id, ct);
-        if (string.IsNullOrEmpty(request.Instalments))
+        if (AccountKind.Normalize(request.Kind) == AccountKind.Bill)
+        {
+            EnsureNewTitle(book, title);
+            book.AddAccount(new Account(title, 0, "", "", "Monthly", 0, 0, request.Notes ?? "") { Kind = AccountKind.Bill });
+        }
+        else if (string.IsNullOrEmpty(request.Instalments))
         {
             EnsureNewTitle(book, title);
             book.AddAccount(new Account(

@@ -23,6 +23,8 @@ internal sealed class AccountRow : IOwnedRow
     public int Instalments { get; set; }
     public double PaymentAmount { get; set; }
     public string Notes { get; set; } = "";
+    /// <summary>"plan" (instalment plan) or "bill" (open-ended monthly bill).</summary>
+    public string Kind { get; set; } = "plan";
 }
 
 internal sealed class PaymentRow : IOwnedRow

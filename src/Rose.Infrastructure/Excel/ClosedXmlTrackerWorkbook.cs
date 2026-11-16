@@ -61,7 +61,10 @@ internal sealed class ClosedXmlTrackerWorkbook(XLWorkbook workbook, TimeProvider
                 frequency is string s ? s.Trim() : Coerce.ToText(frequency),
                 Coerce.ToInt(Cell(row, "instalments", 0d)),
                 Coerce.ToDouble(Cell(row, "payment amount", 0d)),
-                CellValues.Text(Cell(row, "notes", ""))));
+                CellValues.Text(Cell(row, "notes", "")))
+            {
+                Kind = AccountKind.Normalize(CellValues.Text(Cell(row, "type", ""))),
+            });
         }
         return accounts;
     }
@@ -134,6 +137,8 @@ internal sealed class ClosedXmlTrackerWorkbook(XLWorkbook workbook, TimeProvider
         ws.Cell(row, 6).Value = account.Instalments;
         ws.Cell(row, 7).Value = account.PaymentAmount;
         SetText(ws.Cell(row, 8), account.Notes);
+        if (ws.Cell(1, 9).IsEmpty()) ws.Cell(1, 9).Value = AccountHeaders[8];
+        ws.Cell(row, 9).Value = account.IsBill ? "Bill" : "Plan";
         FormatRow(ws, row, money: [2, 7], dates: [3, 4]);
         accounts = null;
     }

@@ -36,6 +36,9 @@ public static class BudgetRules
     /// <summary>The Expense group new lines for paid Payment Tracker payments go into.</summary>
     public const string LoansGroup = "Loans";
 
+    /// <summary>The Expense group new lines for paid bills (water, WiFi, ...) go into.</summary>
+    public const string BillsGroup = "Bills";
+
     public static readonly IReadOnlyDictionary<string, IReadOnlyList<string>> DefaultGroups =
         new Dictionary<string, IReadOnlyList<string>>
         {

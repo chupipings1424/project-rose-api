@@ -32,6 +32,32 @@ public sealed class PaymentBudgetSyncTests : IDisposable
     private PaymentTrackerService Service() => new(new MemoryTrackerStore(_book), new FixedCurrentUser(TestUsers.Alice), _clock);
 
     [Fact]
+    public void A_paid_bill_creates_a_bills_line()
+    {
+        _book.AddAccount(new Account("Water", 0, "", "", "Monthly", 0, 0, "") { Kind = AccountKind.Bill });
+        Pay("p1", "water", 480, "2026-03-10");
+
+        PaymentBudgetSync.Reconcile(_book, Today);
+
+        var line = _book.Line("water");
+        Assert.Equal(BudgetRules.BillsGroup, line.Group);
+        Assert.Equal(480, line.Amounts[2]);
+    }
+
+    [Fact]
+    public void A_paid_bill_adds_on_top_of_the_budget_line_with_the_same_name()
+    {
+        _book.AddAccount(new Account("Water", 0, "", "", "Monthly", 0, 0, "") { Kind = AccountKind.Bill });
+        AddLine(BudgetRules.Expense, "Home", "Water", month: 2, amount: 500);
+        Pay("p1", "Water", 480, "2026-03-10");
+
+        PaymentBudgetSync.Reconcile(_book, Today);
+
+        var line = Assert.Single(_book.Lines);
+        Assert.Equal(("Home", 980d), (line.Group, line.Amounts[2]));
+    }
+
+    [Fact]
     public void A_paid_payment_creates_a_loans_line_in_its_month()
     {
         Pay("p1", "Car", 100, "2026-03-10");

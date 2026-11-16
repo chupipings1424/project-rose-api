@@ -1,3 +1,5 @@
+using Rose.Domain.Tracker;
+
 namespace Rose.Domain.Reporting;
 
 public sealed record ReportSummary(
@@ -51,7 +53,8 @@ public sealed record TitleProgress(
     int PaidCount,
     int PaymentCount,
     string Frequency,
-    double PerPayment);
+    double PerPayment,
+    string Kind = AccountKind.Plan);
 
 public sealed record UpcomingPayment(string Title, double Amount, string DueDate, int Days);
 

@@ -16,6 +16,7 @@ public sealed class ExcelExportTests
     {
         using var source = ClosedXmlTrackerWorkbook.CreateEmpty(_clock);
         source.AddAccount(new Account("Car Loan", 1000, "2026-01-31", "2026-01-31", "Monthly", 4, 250, "note"));
+        source.AddAccount(new Account("Water", 0, "", "", "Monthly", 0, 0, "") { Kind = AccountKind.Bill });
         source.AddPayment(new Payment("p2", "Car Loan", 250, "2026-02-28", "9:00am", "Unpaid", "2026-02-28", "Instalment 2 of 4"));
         source.AddPayment(new Payment("p1", "Car Loan", 1234.5, "2026-01-31", "1:05pm", "Paid", "2026-01-31", ""));
         source.AddBudgetLine(new BudgetLine("b1", 2026, "Expense", "Home", "Rent", [100, 200, 42.5, 0, 0, 0, 0, 0, 0, 0, 0, 0], 342.5, "flat"));

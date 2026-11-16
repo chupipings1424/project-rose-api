@@ -15,11 +15,11 @@ internal static class WorkbookLayout
     public const string DateFormat = "dddd, mmmm d, yyyy";
 
     public static readonly string[] AccountHeaders =
-        ["Title", "Total Amount", "Start Date", "Due Date", "Frequency", "Instalments", "Payment Amount", "Notes"];
+        ["Title", "Total Amount", "Start Date", "Due Date", "Frequency", "Instalments", "Payment Amount", "Notes", "Type"];
 
     public static readonly string[] PaymentHeaders = ["ID", "Title", "Amount", "Date", "Time", "Status", "Due Date", "Note"];
 
-    public static readonly int[] AccountWidths = [26, 16, 30, 30, 14, 13, 17, 34];
+    public static readonly int[] AccountWidths = [26, 16, 30, 30, 14, 13, 17, 34, 10];
     public static readonly int[] PaymentWidths = [38, 26, 16, 30, 12, 12, 30, 34];
 
     // Budget sheet: ID | Year | Section | Group | Item | Jan .. Dec | Notes
