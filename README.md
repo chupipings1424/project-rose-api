@@ -2,7 +2,7 @@
 
 The backend for [Project ROSE](https://github.com/chupipings1424/project-rose): a .NET 9 ASP.NET Core
 Web API serving the **Payment Tracker**, **Personal Budget**, **Reminders**, **Savings Goals**,
-**Habit Tracker** and **Loan Tracker** projects. In the cloud it also serves the built React app, so ROSE is one website.
+**Habit Tracker**, **Loan Tracker** and (admins only) **Health Tracker** projects. In the cloud it also serves the built React app, so ROSE is one website.
 
 ```
 Browser / installed PWA ??HTTPS??> Render (free, Singapore): Docker container
@@ -137,7 +137,9 @@ Test tokens are minted locally with a test-only HS256 secret.
 | Savings Goals | `/api/savings/` `goals`, `goals/{id}`, `goals/{id}/entries`, `goals/{id}/entries/{entryId}` |
 | Habit Tracker | `/api/habits/` `items`, `items/{id}`, `PUT items/{id}/days/{yyyy-MM-dd}`, `items/{id}/nudge/complete\|dismiss\|snooze` |
 | Loan Tracker | `/api/loans` `GET`, `POST`, `PATCH {id}`, `DELETE {id}`, `GET types`, `GET report` (Excel) |
-| Health | `GET /health` (includes a database check) |
+| Health Tracker (admins) | `/api/health` `GET ?days=`, `PUT profile`, `PUT days/{yyyy-MM-dd}`, `POST days/{date}/meals`, `DELETE days/{date}/meals/{mealId}` |
+| My apps | `GET`/`PUT /api/me/apps`: the project ids this account hid (`{ "hidden": ["budget"] }`) |
+| Health check | `GET /health` (includes a database check) |
 
 `GET /api/payment-tracker/download` still gives you everything as an Excel workbook.
 
@@ -191,6 +193,14 @@ and loan amount. `LoanRules` (Domain/Loans) works out everything else from **tod
   amortization x term - loan amount; the finish date is the last due date.
 - Old loans just work: enter any loan date and ROSE fills in the past payments.
 - `GET /api/loans/report` builds `loans.xlsx`: a summary sheet plus one schedule sheet per loan.
+### Health: stored facts, computed estimates
+
+A day stores meals (name + kcal), walk km, the finished fast's hours and an optional weigh-in.
+`HealthRules` (Domain/Health) computes the rest on every read: resting burn (Mifflin-St Jeor),
+walk burn (0.6 x kg x km), balance, BMI, fasting streak, and an **estimated** weight for days
+without a weigh-in (last weight + earlier balances / 7700). Estimates are flagged
+`weight_estimated: true`. Every change returns the full overview.
+
 ## Deploy (all free)
 
 The `Dockerfile` builds the React app from `chupipings1424/project-rose` (`UI_REF`, default

@@ -45,7 +45,7 @@ builder.Services.AddSwaggerGen(options =>
     {
         Title = "Project ROSE API",
         Version = "v1",
-        Description = "Payment Tracker, Budget, Reminders, Savings Goals, Habits and Loans for Project ROSE. Sign in to the React app, "
+        Description = "Payment Tracker, Budget, Reminders, Savings Goals, Habits, Loans, Health (admins) and My apps for Project ROSE. Sign in to the React app, "
             + "copy the Supabase access token (DevTools > Application > Local Storage), click **Authorize** and paste it.",
     });
     options.IncludeXmlComments(Path.Combine(AppContext.BaseDirectory, $"{Assembly.GetExecutingAssembly().GetName().Name}.xml"));

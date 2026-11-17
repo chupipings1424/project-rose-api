@@ -1,7 +1,9 @@
 using Rose.Application.Reminders;
 using Rose.Domain.Common;
 using Rose.Domain.Habits;
+using Rose.Domain.Health;
 using Rose.Domain.Loans;
+using Rose.Domain.Preferences;
 using Rose.Domain.Reminders;
 using Rose.Domain.Savings;
 
@@ -143,6 +145,52 @@ public static LoanRow ToRow(Loan l) => new()
         CreatedAt = h.CreatedAt,
         UpdatedAt = h.UpdatedAt,
         Log = h.Days.ToDictionary(d => d.Date, d => d.Value),
+    };
+
+    public static AppPrefsRow ToRow(AppPrefs p) => new() { Id = p.Id, Hidden = [.. p.Hidden], UpdatedAt = p.UpdatedAt.ToUniversalTime() };
+
+    public static AppPrefs ToDomain(AppPrefsRow p) => new() { Id = p.Id, Hidden = [.. p.Hidden], UpdatedAt = p.UpdatedAt };
+
+    public static HealthProfileRow ToRow(HealthProfile p) => new()
+    {
+        Id = p.Id,
+        HeightCm = p.HeightCm,
+        BirthYear = p.BirthYear,
+        Sex = p.Sex,
+        GoalKg = p.GoalKg,
+        UpdatedAt = p.UpdatedAt.ToUniversalTime(),
+    };
+
+    public static HealthProfile ToDomain(HealthProfileRow p) => new()
+    {
+        Id = p.Id,
+        HeightCm = p.HeightCm,
+        BirthYear = p.BirthYear,
+        Sex = p.Sex,
+        GoalKg = p.GoalKg,
+        UpdatedAt = p.UpdatedAt,
+    };
+
+    public static HealthDayRow ToRow(HealthDay d) => new()
+    {
+        Id = d.Id,
+        Date = d.Date,
+        WeightKg = d.WeightKg,
+        WalkKm = d.WalkKm,
+        FastingHours = d.FastingHours,
+        UpdatedAt = d.UpdatedAt.ToUniversalTime(),
+        Meals = [.. d.Meals.Select(m => new HealthMealRow { DayId = d.Id, Id = m.Id, Name = m.Name, Kcal = m.Kcal, At = m.At.ToUniversalTime() })],
+    };
+
+    public static HealthDay ToDomain(HealthDayRow d) => new()
+    {
+        Id = d.Id,
+        Date = d.Date,
+        WeightKg = d.WeightKg,
+        WalkKm = d.WalkKm,
+        FastingHours = d.FastingHours,
+        UpdatedAt = d.UpdatedAt,
+        Meals = [.. d.Meals.OrderBy(m => m.At).Select(m => new HealthMeal(m.Id, m.Name, m.Kcal, m.At))],
     };
 
     /// <summary>ISO date text ("" = none) -> date column.</summary>

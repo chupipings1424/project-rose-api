@@ -2,7 +2,9 @@ using Microsoft.EntityFrameworkCore;
 using Rose.Application.Abstractions;
 using Rose.Application.Reminders;
 using Rose.Domain.Habits;
+using Rose.Domain.Health;
 using Rose.Domain.Loans;
+using Rose.Domain.Preferences;
 using Rose.Domain.Reminders;
 using Rose.Domain.Savings;
 
@@ -166,5 +168,44 @@ internal sealed class HabitRepository(IDbContextFactory<RoseDbContext> contexts)
     {
         base.Update(db, row, wanted);
         Sync(db, row.Days, wanted.Days, d => d.Date);
+    }
+}
+
+internal sealed class AppPrefsRepository(IDbContextFactory<RoseDbContext> contexts) : EfRepository<AppPrefs, AppPrefsRow>(contexts)
+{
+    protected override IQueryable<AppPrefsRow> Query(RoseDbContext db) => db.AppPrefs;
+    protected override string IdOf(AppPrefs item) => item.Id;
+    protected override string RowId(AppPrefsRow row) => row.Id;
+    protected override System.Linq.Expressions.Expression<Func<AppPrefsRow, bool>> Within(IReadOnlyCollection<string> ids) =>
+        p => ids.Contains(p.Id);
+    protected override AppPrefs ToDomain(AppPrefsRow row) => Mappers.ToDomain(row);
+    protected override AppPrefsRow ToRow(AppPrefs item) => Mappers.ToRow(item);
+}
+
+internal sealed class HealthProfileRepository(IDbContextFactory<RoseDbContext> contexts) : EfRepository<HealthProfile, HealthProfileRow>(contexts)
+{
+    protected override IQueryable<HealthProfileRow> Query(RoseDbContext db) => db.HealthProfiles;
+    protected override string IdOf(HealthProfile item) => item.Id;
+    protected override string RowId(HealthProfileRow row) => row.Id;
+    protected override System.Linq.Expressions.Expression<Func<HealthProfileRow, bool>> Within(IReadOnlyCollection<string> ids) =>
+        p => ids.Contains(p.Id);
+    protected override HealthProfile ToDomain(HealthProfileRow row) => Mappers.ToDomain(row);
+    protected override HealthProfileRow ToRow(HealthProfile item) => Mappers.ToRow(item);
+}
+
+internal sealed class HealthDayRepository(IDbContextFactory<RoseDbContext> contexts) : EfRepository<HealthDay, HealthDayRow>(contexts)
+{
+    protected override IQueryable<HealthDayRow> Query(RoseDbContext db) => db.HealthDays.Include(d => d.Meals);
+    protected override string IdOf(HealthDay item) => item.Id;
+    protected override string RowId(HealthDayRow row) => row.Id;
+    protected override System.Linq.Expressions.Expression<Func<HealthDayRow, bool>> Within(IReadOnlyCollection<string> ids) =>
+        d => ids.Contains(d.Id);
+    protected override HealthDay ToDomain(HealthDayRow row) => Mappers.ToDomain(row);
+    protected override HealthDayRow ToRow(HealthDay item) => Mappers.ToRow(item);
+
+    protected override void Update(RoseDbContext db, HealthDayRow row, HealthDayRow wanted)
+    {
+        base.Update(db, row, wanted);
+        Sync(db, row.Meals, wanted.Meals, m => m.Id);
     }
 }

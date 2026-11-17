@@ -148,6 +148,46 @@ internal sealed class HabitDayRow
     public int Value { get; set; }
 }
 
+internal sealed class AppPrefsRow : IOwnedRow
+{
+    public Guid OwnerId { get; set; }
+    public string Id { get; set; } = "";
+    public string[] Hidden { get; set; } = [];
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
+internal sealed class HealthProfileRow : IOwnedRow
+{
+    public Guid OwnerId { get; set; }
+    public string Id { get; set; } = "";
+    public double? HeightCm { get; set; }
+    public int? BirthYear { get; set; }
+    public string Sex { get; set; } = "";
+    public double? GoalKg { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
+internal sealed class HealthDayRow : IOwnedRow
+{
+    public Guid OwnerId { get; set; }
+    public string Id { get; set; } = "";
+    public DateOnly Date { get; set; }
+    public double? WeightKg { get; set; }
+    public double WalkKm { get; set; }
+    public int? FastingHours { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+    public List<HealthMealRow> Meals { get; set; } = [];
+}
+
+internal sealed class HealthMealRow
+{
+    public string DayId { get; set; } = "";
+    public string Id { get; set; } = "";
+    public string Name { get; set; } = "";
+    public int Kcal { get; set; }
+    public DateTimeOffset At { get; set; }
+}
+
 /// <summary>A ROSE account; <see cref="Id"/> is the Supabase user id.</summary>
 internal sealed class UserRow
 {

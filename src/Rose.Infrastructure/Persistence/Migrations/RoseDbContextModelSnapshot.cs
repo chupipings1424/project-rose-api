@@ -87,6 +87,35 @@ namespace Rose.Infrastructure.Persistence.Migrations
                     b.ToTable("accounts", "rose");
                 });
 
+            modelBuilder.Entity("Rose.Infrastructure.Persistence.AppPrefsRow", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("text")
+                        .HasColumnName("id");
+
+                    b.PrimitiveCollection<string[]>("Hidden")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("hidden");
+
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_app_prefs");
+
+                    b.HasIndex("OwnerId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_app_prefs_owner_id");
+
+                    b.ToTable("app_prefs", "rose");
+                });
+
             modelBuilder.Entity("Rose.Infrastructure.Persistence.AppSecretRow", b =>
                 {
                     b.Property<string>("Key")
@@ -240,6 +269,120 @@ namespace Rose.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_habits_owner_id");
 
                     b.ToTable("habits", "rose");
+                });
+
+            modelBuilder.Entity("Rose.Infrastructure.Persistence.HealthDayRow", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("text")
+                        .HasColumnName("id");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date")
+                        .HasColumnName("date");
+
+                    b.Property<int?>("FastingHours")
+                        .HasColumnType("integer")
+                        .HasColumnName("fasting_hours");
+
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<double>("WalkKm")
+                        .HasColumnType("double precision")
+                        .HasColumnName("walk_km");
+
+                    b.Property<double?>("WeightKg")
+                        .HasColumnType("double precision")
+                        .HasColumnName("weight_kg");
+
+                    b.HasKey("Id")
+                        .HasName("pk_health_days");
+
+                    b.HasIndex("OwnerId", "Date")
+                        .IsUnique()
+                        .HasDatabaseName("ix_health_days_owner_id_date");
+
+                    b.ToTable("health_days", "rose");
+                });
+
+            modelBuilder.Entity("Rose.Infrastructure.Persistence.HealthMealRow", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("text")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("At")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("at");
+
+                    b.Property<string>("DayId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("day_id");
+
+                    b.Property<int>("Kcal")
+                        .HasColumnType("integer")
+                        .HasColumnName("kcal");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.HasKey("Id")
+                        .HasName("pk_health_meals");
+
+                    b.HasIndex("DayId")
+                        .HasDatabaseName("ix_health_meals_day_id");
+
+                    b.ToTable("health_meals", "rose");
+                });
+
+            modelBuilder.Entity("Rose.Infrastructure.Persistence.HealthProfileRow", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("text")
+                        .HasColumnName("id");
+
+                    b.Property<int?>("BirthYear")
+                        .HasColumnType("integer")
+                        .HasColumnName("birth_year");
+
+                    b.Property<double?>("GoalKg")
+                        .HasColumnType("double precision")
+                        .HasColumnName("goal_kg");
+
+                    b.Property<double?>("HeightCm")
+                        .HasColumnType("double precision")
+                        .HasColumnName("height_cm");
+
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_id");
+
+                    b.Property<string>("Sex")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("sex");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_health_profiles");
+
+                    b.HasIndex("OwnerId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_health_profiles_owner_id");
+
+                    b.ToTable("health_profiles", "rose");
                 });
 
             modelBuilder.Entity("Rose.Infrastructure.Persistence.IdempotencyKeyRow", b =>
@@ -624,6 +767,16 @@ namespace Rose.Infrastructure.Persistence.Migrations
                         .HasConstraintName("fk_habit_days_habits_habit_id");
                 });
 
+            modelBuilder.Entity("Rose.Infrastructure.Persistence.HealthMealRow", b =>
+                {
+                    b.HasOne("Rose.Infrastructure.Persistence.HealthDayRow", null)
+                        .WithMany("Meals")
+                        .HasForeignKey("DayId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_health_meals_health_days_day_id");
+                });
+
             modelBuilder.Entity("Rose.Infrastructure.Persistence.SavingsEntryRow", b =>
                 {
                     b.HasOne("Rose.Infrastructure.Persistence.SavingsGoalRow", null)
@@ -637,6 +790,11 @@ namespace Rose.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Rose.Infrastructure.Persistence.HabitRow", b =>
                 {
                     b.Navigation("Days");
+                });
+
+            modelBuilder.Entity("Rose.Infrastructure.Persistence.HealthDayRow", b =>
+                {
+                    b.Navigation("Meals");
                 });
 
             modelBuilder.Entity("Rose.Infrastructure.Persistence.SavingsGoalRow", b =>

@@ -19,6 +19,9 @@ public sealed class RoseDbContext(DbContextOptions<RoseDbContext> options) : DbC
     internal DbSet<SavingsGoalRow> SavingsGoals => Set<SavingsGoalRow>();
     internal DbSet<HabitRow> Habits => Set<HabitRow>();
     internal DbSet<LoanRow> Loans => Set<LoanRow>();
+    internal DbSet<AppPrefsRow> AppPrefs => Set<AppPrefsRow>();
+    internal DbSet<HealthProfileRow> HealthProfiles => Set<HealthProfileRow>();
+    internal DbSet<HealthDayRow> HealthDays => Set<HealthDayRow>();
     internal DbSet<AppSecretRow> AppSecrets => Set<AppSecretRow>();
     internal DbSet<UserRow> Users => Set<UserRow>();
     internal DbSet<IdempotencyKeyRow> IdempotencyKeys => Set<IdempotencyKeyRow>();
@@ -99,6 +102,35 @@ public sealed class RoseDbContext(DbContextOptions<RoseDbContext> options) : DbC
             e.HasIndex(x => x.OwnerId);
             e.Property(x => x.MonthlyAmortization).HasColumnType("numeric");
             e.Property(x => x.Amount).HasColumnType("numeric");
+        });
+
+        modelBuilder.Entity<AppPrefsRow>(e =>
+        {
+            e.ToTable("app_prefs");
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => x.OwnerId).IsUnique();
+        });
+
+        modelBuilder.Entity<HealthProfileRow>(e =>
+        {
+            e.ToTable("health_profiles");
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => x.OwnerId).IsUnique();
+        });
+
+        modelBuilder.Entity<HealthDayRow>(e =>
+        {
+            e.ToTable("health_days");
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => new { x.OwnerId, x.Date }).IsUnique();
+            e.HasMany(x => x.Meals).WithOne().HasForeignKey(x => x.DayId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<HealthMealRow>(e =>
+        {
+            e.ToTable("health_meals");
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => x.DayId);
         });
 
         modelBuilder.Entity<HabitRow>(e =>
